@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kyrios Homes For Rent</string>
+    <string name="title_activity_main">Kyrios Homes For Rent</string>
+    <string name="package_name">com.kyrioshomesforrent.app</string>
+    <string name="custom_url_scheme">com.kyrioshomesforrent.app</string>
+</resources>
