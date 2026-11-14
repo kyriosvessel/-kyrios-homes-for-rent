@@ -3906,3 +3906,30 @@ footer p {
   background-position: center !important;
   background-repeat: no-repeat !important;
 }
+
+
+.agent-dashboard .dashboard-stat-clickable {
+  width: 100%;
+  display: block;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.agent-dashboard .dashboard-stat-clickable:focus-visible {
+  outline: 3px solid #d4ad4d;
+  outline-offset: 3px;
+}
+
+.agent-dashboard .dashboard-stat-clickable small {
+  color: #176b43;
+  font-weight: 700;
+}
+
+.agent-dashboard .dashboard-section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 18px 0 24px;
+}

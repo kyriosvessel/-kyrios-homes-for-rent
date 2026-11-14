@@ -3,6 +3,7 @@ import { Search, MapPin, BedDouble, Bath, Menu, User, ArrowRight, Lock, Mail, Ph
 import './App.css';
 import { supabase } from './supabase';
 import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import {
   AdMob,
   AdmobConsentStatus,
@@ -173,7 +174,7 @@ function AgentPortal({ onClose, onLogin, initialMode, logoName, logoSubtitle, lo
 
 
 
-function AgentDashboard({ user, onLogout, onHome, openEnquiries = false, onEnquiriesOpened, enquiryCount, logoName, logoSubtitle, logoInitials }) {
+function AgentDashboard({ user, onLogout, onHome, backHandlerRef, openEnquiries = false, onEnquiriesOpened, enquiryCount, logoName, logoSubtitle, logoInitials }) {
   const [profile, setProfile] = useState(null);
   const [points, setPoints] = useState(0);
   const [properties, setProperties] = useState([]);
@@ -206,11 +207,29 @@ function AgentDashboard({ user, onLogout, onHome, openEnquiries = false, onEnqui
   const [editingProperty, setEditingProperty] = useState(null);
   const [verification, setVerification] = useState(null);
   const [showVerificationPage, setShowVerificationPage] = useState(false);
+  const [showMyListingsPage, setShowMyListingsPage] = useState(false);
   const [governmentIdType, setGovernmentIdType] = useState('National ID');
   const [governmentIdFile, setGovernmentIdFile] = useState(null);
   const [selfieFile, setSelfieFile] = useState(null);
   const [verificationSubmitting, setVerificationSubmitting] = useState(false);
   const [verificationMessage, setVerificationMessage] = useState('');
+
+  useEffect(() => {
+    if (!backHandlerRef) return;
+    backHandlerRef.current = () => {
+      if (showAdvertForm) { setShowAdvertForm(false); setEditingProperty(null); return; }
+      if (showBuyPoints) { setShowBuyPoints(false); return; }
+      if (showVerificationPage) { setShowVerificationPage(false); return; }
+      if (showMyListingsPage) { setShowMyListingsPage(false); return; }
+      if (showHousingRequests) { setShowHousingRequests(false); return; }
+      if (showEnquiries) { setShowEnquiries(false); onEnquiriesOpened?.(); return; }
+      onHome?.();
+    };
+    return () => { backHandlerRef.current = null; };
+  }, [backHandlerRef, showAdvertForm, showBuyPoints, showVerificationPage,
+      showMyListingsPage, showHousingRequests, showEnquiries, onEnquiriesOpened, onHome]);
+
+
 
   async function handleDeleteProperty(property) {
     if (!window.confirm(`Delete ${property.title}?`)) return;
@@ -605,158 +624,99 @@ function openAgentRequest(request) {
     }
   }
 
-  if (showVerificationPage) {
+
+  if (showEnquiries) {
     return (
       <main className="agent-dashboard">
         <header className="header">
           <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
           <div className="dashboard-actions">
-            <button type="button" className="login" onClick={() => setShowVerificationPage(false)}>Back to Dashboard</button>
+            <button type="button" className="login" onClick={() => setShowEnquiries(false)}>Back to Dashboard</button>
             <button type="button" className="login" onClick={onLogout}>Logout</button>
           </div>
         </header>
         <section className="dashboard-welcome">
-          <span className="eyebrow">ACCOUNT SECURITY</span>
-          <h1>Agent Verification</h1>
-          <p>Submit your identity documents securely for administrator review.</p>
+          <span className="eyebrow">CUSTOMER COMMUNICATION</span>
+          <h1>Property Enquiries</h1>
+          <p>Messages from customers interested in your property listings.</p>
         </section>
         <section className="dashboard-content">
           <section className="dashboard-panel">
-            <span className="eyebrow">IDENTITY CHECK</span>
-            <h2>Verify Your Identity</h2>
-            {verification && (
-              <>
-                <p>Government ID: <strong>{verification.government_id_type}</strong></p>
-                <p>Verification status: <strong>{verification.status.toUpperCase()}</strong></p>
-                {verification.admin_note && <p>Administrator note: {verification.admin_note}</p>}
-                {verification.submitted_at && <p>Submitted: {new Date(verification.submitted_at).toLocaleString('en-NG')}</p>}
-              </>
-            )}
-            {verificationMessage && <p className="portal-message" role="status">{verificationMessage}</p>}
-            {(!verification || verification.status === 'rejected') ? (
-              <form className="advert-form" onSubmit={submitAgentVerification}>
-                <label>Government ID type
-                  <select value={governmentIdType} onChange={e => setGovernmentIdType(e.target.value)} required>
-                    <option>National ID</option>
-                    <option>International Passport</option>
-                    <option>Drivers License</option>
-                    <option>Voters Card</option>
-                  </select>
-                </label>
-                <label>Government ID document (PDF, JPG, PNG or WebP; max 5 MB)
-                  <input type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={e => setGovernmentIdFile(e.target.files?.[0] || null)} required />
-                </label>
-                <label>Clear selfie photo (JPG, PNG or WebP; max 5 MB)
-                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => setSelfieFile(e.target.files?.[0] || null)} required />
-                </label>
-                <button type="submit" className="portal-submit" disabled={verificationSubmitting}>
-                  {verificationSubmitting ? 'Submitting...' : 'Submit for Verification'}
-                </button>
-              </form>
-            ) : (
-              <p>Your documents are already submitted. You cannot submit again unless your verification is rejected.</p>
+            <h2>My Property Enquiries ({enquiries.length})</h2>
+            <p>Messages from customers interested in your property listings.</p>
+            {enquiries.length === 0 ? <p>No customer enquiries have been received for your properties yet.</p> : (
+              <div className="dashboard-listings">
+                {enquiries.map(enquiry => {
+                  const property = properties.find(item => item.id === enquiry.property_id);
+                  const phone = (enquiry.customer_phone || '').replace(/\D/g, '');
+                  const whatsappPhone = phone.startsWith('0') ? '234' + phone.slice(1) : phone;
+                  const whatsappLink = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent('Hello ' + enquiry.customer_name + ', I am contacting you about your property enquiry.')}`;
+                  return (
+                    <article className="dashboard-listing" key={enquiry.id}>
+                      <div>
+                        <strong>{enquiry.customer_name}</strong>
+                        <p>Property: {property?.title || 'Property enquiry'}</p>
+                        <p>Phone: {enquiry.customer_phone}</p>
+                        <p>{enquiry.message}</p>
+                        <small>Received: {new Date(enquiry.created_at).toLocaleString('en-NG')}</small>
+                        <br />
+                        <small>Status: {enquiry.status || 'new'}</small>
+                        <div className="public-property-contact">
+                          <a href={`tel:${enquiry.customer_phone}`}><Phone size={16} /> Call Customer</a>
+                          {whatsappPhone && <a href={whatsappLink} target="_blank" rel="noreferrer">WhatsApp Customer</a>}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             )}
           </section>
         </section>
-
-        <footer className="agent-dashboard-footer">
-          <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
-          <p>Helping people find a place to call home.</p>
-          <small>© {new Date().getFullYear()} Kyrios Homes For Rent. All rights reserved.</small>
-        </footer>
-</main>
+      </main>
     );
   }
 
-  if (showBuyPoints) {
+  if (showHousingRequests) {
     return (
-      <main className="agent-dashboard agent-dashboard-agent">
+      <main className="agent-dashboard">
+        <header className="header">
+          <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
+          <div className="dashboard-actions">
+            <button type="button" className="login" onClick={() => setShowHousingRequests(false)}>Back to Dashboard</button>
+            <button type="button" className="login" onClick={onLogout}>Logout</button>
+          </div>
+        </header>
+        <section className="dashboard-welcome">
+          <span className="eyebrow">SHARED CUSTOMER REQUESTS</span>
+          <h1>Housing Requests</h1>
+          <p>Review housing requests shared with all agents.</p>
+        </section>
         <section className="dashboard-content">
           <section className="dashboard-panel">
-            <button className="login" type="button" onClick={() => setShowBuyPoints(false)}>
-              Back to Dashboard
-            </button>
-            <span className="eyebrow">ACCOUNT POINTS</span>
-            <h2>Buy Points</h2>
-            <p>Choose a payment method. Your points will be added after admin confirmation.</p>
-
-            {purchaseMessage && <p className="portal-message" role="status">{purchaseMessage}</p>}
-
-            <form className="advert-form" onSubmit={handlePointPurchaseSubmit}>
-              <label>Payment method
-                <select name="payment_method" value={purchaseMethod}
-                  onChange={e => setPurchaseMethod(e.target.value)} required>
-                  <option value="MTN Recharge Card">MTN Recharge Card</option>
-                  <option value="Bank Transfer">OPay Transfer</option>
-                </select>
-              </label>
-
-              <label>Amount paid (₦)
-                <input name="amount_paid" type="number" min="500" step="1"
-                  value={purchaseAmount}
-                  onChange={e => setPurchaseAmount(e.target.value)} required />
-              </label>
-              <p>
-                Estimated coins: <strong>
-                  {Math.floor((Number(purchaseAmount) || 0) *
-                    (purchaseMethod === 'Bank Transfer' ? 350 : 300) / 500).toLocaleString()}
-                </strong>
-              </p>
-              <small>Minimum payment ₦500. Coins are confirmed after admin approval.</small>
-
-              {purchaseMethod === 'Bank Transfer' ? (
-                <>
-                  <div className="dashboard-panel">
-                    <span className="eyebrow">OPAY ACCOUNT DETAILS</span>
-                    <h3>7068963439</h3>
-                    <p>Account name: Kerimu Thankgod</p>
-                    <p>Make your transfer and upload your payment receipt below.</p>
-                  </div>
-                  <label>Your name
-                    <input name="sender_name" type="text" required />
-                  </label>
-                  <label>Your phone number
-                    <input name="sender_phone" type="tel" required />
-                  </label>
-                  <label>Transfer reference
-                    <input name="transfer_reference" type="text" required />
-                  </label>
-                  <label>Payment receipt
-                    <input name="proof" type="file" accept="image/*,.pdf" required />
-                  </label>
-                </>
-              ) : (
-                <>
-                  <label>MTN recharge PIN
-                    <input name="recharge_pin" type="password" autoComplete="off" required />
-                  </label>
-                  <label>MTN serial number
-                    <input name="serial_number" type="text" />
-                  </label>
-                  <label>Your phone number
-                    <input name="sender_phone" type="tel" />
-                  </label>
-                </>
-              )}
-
-              <button className="portal-submit" type="submit" disabled={purchaseSubmitting}>
-                {purchaseSubmitting ? 'Submitting...' : 'Send for Admin Verification'}
-              </button>
-            </form>
-
-            <h2>Your Purchase Requests</h2>
-            {purchaseRequests.length === 0 ? <p>No purchase requests yet.</p> : (
+            <h2>Housing Requests</h2>
+            <p>These requests are visible to all agents.</p>
+            {housingRequests.length === 0 ? <p>No housing requests have been received yet.</p> : (
               <div className="dashboard-listings">
-                {purchaseRequests.map(request => (
+                {housingRequests.map(request => (
                   <article className="dashboard-listing" key={request.id}>
                     <div>
-                      <strong>{request.payment_method === 'Bank Transfer' ? 'OPay Transfer' : request.payment_method}</strong>
-                      <p>Amount paid: ₦{Number(request.amount_paid).toLocaleString('en-NG')}</p>
-                      {request.status === 'approved' && <p>Points awarded: {request.points_awarded}</p>}
-                      {request.admin_note && <small>Admin note: {request.admin_note}</small>}
-                      <small>{new Date(request.created_at).toLocaleString()}</small>
+                      <strong>{request.customer_name || 'Customer'}</strong>
+                      <p>Location: {[request.area, request.city, request.state].filter(Boolean).join(', ') || 'Not specified'}</p>
+                      <p>Budget: {request.budget || 'Not specified'}</p>
+                      <p>Property type: {request.property_type || 'Not specified'}</p>
+                      <p>Bedrooms: {request.bedrooms || 'Not specified'}</p>
+                      <p>Phone: {request.customer_phone || 'Not provided'}</p>
+                      <p>{request.description || ''}</p>
+                      <small>Received: {request.created_at ? new Date(request.created_at).toLocaleString('en-NG') : ''}</small>
+                      <br />
+                      <small>Status: {request.status || 'new'}</small>
+                      {request.customer_phone && (
+                        <div className="public-property-contact">
+                          <a href={`tel:${request.customer_phone}`}><Phone size={16} /> Call Customer</a>
+                        </div>
+                      )}
                     </div>
-                    <span className={'listing-status ' + request.status}>{request.status}</span>
                   </article>
                 ))}
               </div>
@@ -767,191 +727,25 @@ function openAgentRequest(request) {
     );
   }
 
-  return (
-    <main className="agent-dashboard">
-      <header className="header">
-        <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
-        <div className="dashboard-actions"><button className="login" onClick={onHome}>Home</button><button className="login" onClick={onLogout}>Logout</button></div>
-      </header>
-
-      <section className="dashboard-welcome">
-        <span className="eyebrow">AGENT CONTROL PANEL</span>
-        <h1>Welcome, {profile?.full_name || user.email || 'Agent'} {verification?.status === 'approved' && <span className="agent-verified-badge" title="Verified Agent" aria-label="Verified Agent">✓</span>}</h1>
-        <p>Manage your property adverts and account activity.</p>
-      </section>
-
-        <section id="agent-account-points" className="dashboard-panel">
-            <span className="eyebrow">ACCOUNT POINTS</span>
-            <h2>Buy Points</h2>
-            <p>Purchase points using OPay transfer or an MTN recharge card.</p>
-            <button className="portal-submit" type="button" onClick={() => setShowBuyPoints(true)}>
-              Buy Points
-            </button>
-          </section>
-
-            <div className="dashboard-stats">
-              <article className="dashboard-stat">
-                <span>Available points</span>
-                <strong>{availableForAdverts}</strong>
-                <small>Ready for new adverts</small>
-              </article>
-              <article className="dashboard-stat">
-                <span>Total listings</span>
-                <strong>{properties.length}</strong>
-                <small>Your submitted properties</small>
-              </article>
-              <article className="dashboard-stat">
-                <span>Approved listings</span>
-                <strong>{approved}</strong>
-                <small>Published properties</small>
-              </article>
-              <article className="dashboard-stat">
-                <span>Pending review</span>
-                <strong>{pending}</strong>
-                <small>Awaiting admin confirmation</small>
-              </article>
-            </div>
-
-
-
-    <section className="dashboard-content">
-        {loading ? <p>Loading your dashboard...</p> : (
-          <>
-            {error && <p className="portal-message">{error}</p>}
-      {newCustomerRequests.length > 0 && (
-        <section id="agent-new-requests" className="dashboard-panel admin-new-requests">
-          <span className="eyebrow">NEW CUSTOMER ACTIVITY</span>
-          <h2>New Customer Requests ({newCustomerRequests.length})</h2>
-          <p>Only enquiries for your properties and shared housing requests appear here.</p>
-          <div className="admin-new-request-list">
-            {newCustomerRequests.map(request => (
-              <button
-                type="button"
-                className="admin-new-request"
-                key={request.key}
-                onClick={() => openAgentRequest(request)}
-              >
-                <span className="admin-new-request-type">{request.typeLabel}</span>
-                <strong>{request.customer_name || 'Customer'}</strong>
-                <small>{request.propertyTitle} · {request.customer_phone || 'No phone provided'}</small>
-                <small>{request.created_at ? new Date(request.created_at).toLocaleString('en-NG') : ''}</small>
-              </button>
-            ))}
+  if (showMyListingsPage) {
+    return (
+      <main className="agent-dashboard">
+        <header className="header">
+          <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
+          <div className="dashboard-actions">
+            <button type="button" className="login" onClick={() => setShowMyListingsPage(false)}>Back to Dashboard</button>
+            <button type="button" className="login" onClick={onLogout}>Logout</button>
           </div>
+        </header>
+        <section className="dashboard-welcome">
+          <span className="eyebrow">PROPERTY MANAGEMENT</span>
+          <h1>My Listings</h1>
+          <p>Manage your property adverts and listings.</p>
         </section>
-      )}
-
-
-
-
-            <section id="agent-property-enquiries" className="dashboard-panel agent-enquiry-panel">
-            <button
-              type="button"
-              className="agent-enquiry-toggle"
-              aria-expanded={showEnquiries}
-              onClick={() => setShowEnquiries(value => !value)}
-            >
-              <span>Property Enquiries ({enquiryCount ?? enquiries.length})</span>
-              <span>{showEnquiries ? 'Hide enquiries' : 'View enquiries'} <ArrowRight size={17} /></span>
-            </button>
-
-            {showEnquiries && (
-              <>
-                <span className="eyebrow">CUSTOMER COMMUNICATION</span>
-                <h2 style={{ color: "#14532d" }}>My Property Enquiries ({enquiries.length})</h2>
-                <p>Messages from customers interested in your property listings.</p>
-                {enquiries.length === 0 ? (
-                  <p>No customer enquiries have been received for your properties yet.</p>
-                ) : (
-                  <div className="dashboard-listings">
-                    {enquiries.map(enquiry => {
-                      const property = properties.find(item => item.id === enquiry.property_id);
-                      const phone = (enquiry.customer_phone || '').replace(/\D/g, '');
-                      const whatsappPhone = phone.startsWith('0') ? '234' + phone.slice(1) : phone;
-                      const whatsappLink = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent('Hello ' + enquiry.customer_name + ', I am contacting you about your property enquiry.')}`;
-
-
-  return (
-                        <article className="dashboard-listing" key={enquiry.id}>
-                          <div>
-                            <strong>{enquiry.customer_name}</strong>
-                            <p>Property: {property?.title || 'Property enquiry'}</p>
-                            <p>Phone: {enquiry.customer_phone}</p>
-                            <p>{enquiry.message}</p>
-                            <small>Received: {new Date(enquiry.created_at).toLocaleString('en-NG')}</small>
-                            <br />
-                            <small>Status: {enquiry.status || 'new'}</small>
-                            <div className="public-property-contact">
-                              <a href={`tel:${enquiry.customer_phone}`}><Phone size={16} /> Call Customer</a>
-                              {whatsappPhone && <a href={whatsappLink} target="_blank" rel="noreferrer">WhatsApp Customer</a>}
-                            </div>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-          <section id="agent-housing-requests" className="dashboard-panel agent-enquiry-panel">
-            <button
-              type="button"
-              className="agent-enquiry-toggle"
-              aria-expanded={showHousingRequests}
-              onClick={() => setShowHousingRequests(value => !value)}
-            >
-              <span>Housing Requests ({housingRequests.length})</span>
-              <span>{showHousingRequests ? 'Hide requests' : 'View requests'} <ArrowRight size={17} /></span>
-            </button>
-            {showHousingRequests && (
-              <>
-                <span className="eyebrow">SHARED CUSTOMER REQUESTS</span>
-                <h2 style={{ color: "#14532d" }}>Housing Requests</h2>
-                <p>These requests are visible to all agents.</p>
-                {housingRequests.length === 0 ? (
-                  <p>No housing requests have been received yet.</p>
-                ) : (
-                  <div className="dashboard-listings">
-                    {housingRequests.map(request => (
-                      <article className="dashboard-listing" key={request.id}>
-                        <div>
-                          <strong>{request.customer_name || 'Customer'}</strong>
-                          <p>Location: {[request.area, request.city, request.state].filter(Boolean).join(', ') || 'Not specified'}</p>
-                          <p>Budget: {request.budget || 'Not specified'}</p>
-                          <p>Property type: {request.property_type || 'Not specified'}</p>
-                          <p>Bedrooms: {request.bedrooms || 'Not specified'}</p>
-                          <p>Phone: {request.customer_phone || 'Not provided'}</p>
-                          <p>{request.description || ''}</p>
-                          <small>Received: {request.created_at ? new Date(request.created_at).toLocaleString('en-NG') : ''}</small>
-                          <br />
-                          <small>Status: {request.status || 'new'}</small>
-                          {request.customer_phone && (
-                            <div className="public-property-contact">
-                              <a href={`tel:${request.customer_phone}`}><Phone size={16} /> Call Customer</a>
-                            </div>
-                          )}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-
-<section className="dashboard-panel">
-  <span className="eyebrow">ACCOUNT SECURITY</span>
-  <h2>Identity Verification</h2>
-  <p>Verify your identity to build trust with customers.</p>
-  {verification && <p>Status: <strong>{verification.status.toUpperCase()}</strong></p>}
-  <button type="button" className="portal-submit" onClick={() => setShowVerificationPage(true)}>
-    {verification ? 'View Verification' : 'Verify Account'}
-  </button>
-</section>
-
+        <section className="dashboard-content">
+          {loading ? <p>Loading your listings...</p> : (
+            <>
+              {error && <p className="portal-message">{error}</p>}
 <section id="agent-property-listings" className="dashboard-panel">
               <div className="dashboard-panel-heading">
                 <div>
@@ -1155,6 +949,308 @@ function openAgentRequest(request) {
                 </div>
               )}
             </section>
+            </>
+          )}
+        </section>
+      </main>
+    );
+  }
+
+  if (showVerificationPage) {
+    return (
+      <main className="agent-dashboard">
+        <header className="header">
+          <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
+          <div className="dashboard-actions">
+            <button type="button" className="login" onClick={() => setShowVerificationPage(false)}>Back to Dashboard</button>
+            <button type="button" className="login" onClick={onLogout}>Logout</button>
+          </div>
+        </header>
+        <section className="dashboard-welcome">
+          <span className="eyebrow">ACCOUNT SECURITY</span>
+          <h1>Agent Verification</h1>
+          <p>Submit your identity documents securely for administrator review.</p>
+        </section>
+        <section className="dashboard-content">
+          <section className="dashboard-panel">
+            <span className="eyebrow">IDENTITY CHECK</span>
+            <h2>Verify Your Identity</h2>
+            {verification && (
+              <>
+                <p>Government ID: <strong>{verification.government_id_type}</strong></p>
+                <p>Verification status: <strong>{verification.status.toUpperCase()}</strong></p>
+                {verification.admin_note && <p>Administrator note: {verification.admin_note}</p>}
+                {verification.submitted_at && <p>Submitted: {new Date(verification.submitted_at).toLocaleString('en-NG')}</p>}
+              </>
+            )}
+            {verificationMessage && <p className="portal-message" role="status">{verificationMessage}</p>}
+            {(!verification || verification.status === 'rejected') ? (
+              <form className="advert-form" onSubmit={submitAgentVerification}>
+                <label>Government ID type
+                  <select value={governmentIdType} onChange={e => setGovernmentIdType(e.target.value)} required>
+                    <option>National ID</option>
+                    <option>International Passport</option>
+                    <option>Drivers License</option>
+                    <option>Voters Card</option>
+                  </select>
+                </label>
+                <label>Government ID document (PDF, JPG, PNG or WebP; max 5 MB)
+                  <input type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={e => setGovernmentIdFile(e.target.files?.[0] || null)} required />
+                </label>
+                <label>Clear selfie photo (JPG, PNG or WebP; max 5 MB)
+                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => setSelfieFile(e.target.files?.[0] || null)} required />
+                </label>
+                <button type="submit" className="portal-submit" disabled={verificationSubmitting}>
+                  {verificationSubmitting ? 'Submitting...' : 'Submit for Verification'}
+                </button>
+              </form>
+            ) : (
+              <p>Your documents are already submitted. You cannot submit again unless your verification is rejected.</p>
+            )}
+          </section>
+        </section>
+
+        <footer className="agent-dashboard-footer">
+          <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
+          <p>Helping people find a place to call home.</p>
+          <small>© {new Date().getFullYear()} Kyrios Homes For Rent. All rights reserved.</small>
+        </footer>
+</main>
+    );
+  }
+
+  if (showBuyPoints) {
+    return (
+      <main className="agent-dashboard agent-dashboard-agent">
+        <header className="header">
+          <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
+          <div className="dashboard-actions">
+            <button className="login" type="button" onClick={() => setShowBuyPoints(false)}>Back to Dashboard</button>
+            <button className="login" type="button" onClick={onLogout}>Logout</button>
+          </div>
+        </header>
+
+        <section className="dashboard-welcome">
+          <span className="eyebrow">ACCOUNT POINTS</span>
+          <h1>Available Points</h1>
+          <p>Manage your points balance and purchase points for premium property adverts.</p>
+        </section>
+
+        <section className="dashboard-content">
+          <section className="dashboard-panel">
+            <span className="eyebrow">YOUR POINTS BALANCE</span>
+            <h2>{availableForAdverts.toLocaleString()} Points Available</h2>
+            <p>Points are used to publish premium property adverts on Kyrios Homes For Rent. You need sufficient points to submit new premium adverts.</p>
+
+            <h2>How to Buy Points</h2>
+            <ol>
+              <li>Select OPay Transfer or MTN Recharge Card.</li>
+              <li>Enter your payment amount. The minimum payment is ₦500.</li>
+              <li>Follow the instructions for your selected payment method.</li>
+              <li>Submit your payment details and required proof.</li>
+              <li>Wait for administrator verification. Points are credited after approval.</li>
+            </ol>
+
+            <h2>Buy Points</h2>
+            <p>Choose your payment method and submit your payment details for verification.</p>
+
+            {purchaseMessage && <p className="portal-message" role="status">{purchaseMessage}</p>}
+
+            <form className="advert-form" onSubmit={handlePointPurchaseSubmit}>
+              <label>Payment method
+                <select name="payment_method" value={purchaseMethod}
+                  onChange={e => setPurchaseMethod(e.target.value)} required>
+                  <option value="MTN Recharge Card">MTN Recharge Card</option>
+                  <option value="Bank Transfer">OPay Transfer</option>
+                </select>
+              </label>
+
+              <label>Amount paid (₦)
+                <input name="amount_paid" type="number" min="500" step="1"
+                  value={purchaseAmount}
+                  onChange={e => setPurchaseAmount(e.target.value)} required />
+              </label>
+              <p>
+                Estimated coins: <strong>
+                  {Math.floor((Number(purchaseAmount) || 0) *
+                    (purchaseMethod === 'Bank Transfer' ? 350 : 300) / 500).toLocaleString()}
+                </strong>
+              </p>
+              <small>Minimum payment ₦500. Coins are confirmed after admin approval.</small>
+
+              {purchaseMethod === 'Bank Transfer' ? (
+                <>
+                  <div className="dashboard-panel">
+                    <span className="eyebrow">OPAY ACCOUNT DETAILS</span>
+                    <h3>7068963439</h3>
+                    <p>Account name: Kerimu Thankgod</p>
+                    <p>Make your transfer and upload your payment receipt below.</p>
+                  </div>
+                  <label>Your name
+                    <input name="sender_name" type="text" required />
+                  </label>
+                  <label>Your phone number
+                    <input name="sender_phone" type="tel" required />
+                  </label>
+                  <label>Transfer reference
+                    <input name="transfer_reference" type="text" required />
+                  </label>
+                  <label>Payment receipt
+                    <input name="proof" type="file" accept="image/*,.pdf" required />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label>MTN recharge PIN
+                    <input name="recharge_pin" type="password" autoComplete="off" required />
+                  </label>
+                  <label>MTN serial number
+                    <input name="serial_number" type="text" />
+                  </label>
+                  <label>Your phone number
+                    <input name="sender_phone" type="tel" />
+                  </label>
+                </>
+              )}
+
+              <button className="portal-submit" type="submit" disabled={purchaseSubmitting}>
+                {purchaseSubmitting ? 'Submitting...' : 'Send for Admin Verification'}
+              </button>
+            </form>
+
+            <h2>Your Purchase Requests</h2>
+            {purchaseRequests.length === 0 ? <p>No purchase requests yet.</p> : (
+              <div className="dashboard-listings">
+                {purchaseRequests.map(request => (
+                  <article className="dashboard-listing" key={request.id}>
+                    <div>
+                      <strong>{request.payment_method === 'Bank Transfer' ? 'OPay Transfer' : request.payment_method}</strong>
+                      <p>Amount paid: ₦{Number(request.amount_paid).toLocaleString('en-NG')}</p>
+                      {request.status === 'approved' && <p>Points awarded: {request.points_awarded}</p>}
+                      {request.admin_note && <small>Admin note: {request.admin_note}</small>}
+                      <small>{new Date(request.created_at).toLocaleString()}</small>
+                    </div>
+                    <span className={'listing-status ' + request.status}>{request.status}</span>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="agent-dashboard">
+      <header className="header">
+        <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
+        <div className="dashboard-actions"><button className="login" onClick={onHome}>Home</button><button className="login" onClick={onLogout}>Logout</button></div>
+      </header>
+
+      <section className="dashboard-welcome">
+        <span className="eyebrow">AGENT CONTROL PANEL</span>
+        <h1>Welcome, {profile?.full_name || user.email || 'Agent'} {verification?.status === 'approved' && <span className="agent-verified-badge" title="Verified Agent" aria-label="Verified Agent">✓</span>}</h1>
+        <p>Manage your property adverts and account activity.</p>
+      </section>
+
+            <div className="dashboard-stats">
+              <button
+                type="button"
+                className="dashboard-stat dashboard-stat-clickable"
+                onClick={() => setShowBuyPoints(true)}
+                aria-label="Open Available Points and Buy Points"
+              >
+                <span>Available points</span>
+                <strong>{availableForAdverts}</strong>
+                <small>Ready for new adverts · View and buy points ↗</small>
+              </button>
+              <article className="dashboard-stat">
+                <span>Total listings</span>
+                <strong>{properties.length}</strong>
+                <small>Your submitted properties</small>
+              </article>
+              <article className="dashboard-stat">
+                <span>Approved listings</span>
+                <strong>{approved}</strong>
+                <small>Published properties</small>
+              </article>
+              <article className="dashboard-stat">
+                <span>Pending review</span>
+                <strong>{pending}</strong>
+                <small>Awaiting admin confirmation</small>
+              </article>
+            </div>
+
+
+
+    <section className="dashboard-content">
+        {loading ? <p>Loading your dashboard...</p> : (
+          <>
+            {error && <p className="portal-message">{error}</p>}
+      {newCustomerRequests.length > 0 && (
+        <section id="agent-new-requests" className="dashboard-panel admin-new-requests">
+          <span className="eyebrow">NEW CUSTOMER ACTIVITY</span>
+          <h2>New Customer Requests ({newCustomerRequests.length})</h2>
+          <p>Only enquiries for your properties and shared housing requests appear here.</p>
+          <div className="admin-new-request-list">
+            {newCustomerRequests.map(request => (
+              <button
+                type="button"
+                className="admin-new-request"
+                key={request.key}
+                onClick={() => openAgentRequest(request)}
+              >
+                <span className="admin-new-request-type">{request.typeLabel}</span>
+                <strong>{request.customer_name || 'Customer'}</strong>
+                <small>{request.propertyTitle} · {request.customer_phone || 'No phone provided'}</small>
+                <small>{request.created_at ? new Date(request.created_at).toLocaleString('en-NG') : ''}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+
+
+
+            <div className="dashboard-section-grid">
+  <button type="button" className="dashboard-stat dashboard-stat-clickable" onClick={() => setShowEnquiries(true)}>
+    <span>Property Enquiries</span>
+    <strong>{enquiryCount ?? enquiries.length}</strong>
+    <small>View customer messages and contact details ↗</small>
+  </button>
+  <button type="button" className="dashboard-stat dashboard-stat-clickable" onClick={() => setShowHousingRequests(true)}>
+    <span>Housing Requests</span>
+    <strong>{housingRequests.length}</strong>
+    <small>View shared customer housing requests ↗</small>
+  </button>
+
+
+<button
+  type="button"
+  className="dashboard-stat dashboard-stat-clickable"
+  onClick={() => setShowVerificationPage(true)}
+>
+  <span>Identity Verification</span>
+  <strong>
+    {verification?.status?.toLowerCase() === 'approved' ? (
+      <>YOU ARE APPROVED <span title="Verified account" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:'19px',height:'19px',borderRadius:'50%',background:'#1877f2',color:'#fff',fontSize:'13px',fontWeight:800,marginLeft:'5px'}}>✓</span></>
+    ) : verification ? verification.status.toUpperCase() : 'NOT VERIFIED'}
+  </strong>
+  <small>{verification ? 'View your verification details' : 'Verify your account'} ↗</small>
+</button>
+
+<button
+  type="button"
+  className="dashboard-stat dashboard-stat-clickable"
+  onClick={() => setShowMyListingsPage(true)}
+>
+  <span>My Listings</span>
+  <strong>{properties.length}</strong>
+  <small>Manage your property adverts ↗</small>
+</button>
+</div>
 
           </>
         )}
@@ -1165,7 +1261,7 @@ function openAgentRequest(request) {
 
 
 
-function AdminDashboard({ user, onLogout, onHome, developerMode, onToggleDeveloperMode, logoName, logoSubtitle, logoInitials }) {
+function AdminDashboard({ user, onLogout, onHome, backHandlerRef, developerMode, onToggleDeveloperMode, logoName, logoSubtitle, logoInitials }) {
   const [properties, setProperties] = useState([]);
   const [agents, setAgents] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
@@ -1193,6 +1289,28 @@ function AdminDashboard({ user, onLogout, onHome, developerMode, onToggleDevelop
   const [verifications, setVerifications] = useState([]);
   const [verificationNotes, setVerificationNotes] = useState({});
   const [reviewingVerification, setReviewingVerification] = useState(null);
+
+  useEffect(() => {
+    if (!backHandlerRef) return;
+    backHandlerRef.current = () => {
+      if (reviewingVerification) { setReviewingVerification(null); return; }
+      if (reviewingPurchase) { setReviewingPurchase(null); return; }
+      if (reviewing) { setReviewing(null); return; }
+      if (activeAdminSection === 'properties' && availabilityFilter !== 'all') {
+        setAvailabilityFilter('all'); return;
+      }
+      if (activeAdminSection === 'properties' && tab !== 'pending') {
+        setTab('pending'); return;
+      }
+      if (requestTab !== 'enquiries') { setRequestTab('enquiries'); return; }
+      if (activeAdminSection !== 'overview') { setActiveAdminSection('overview'); return; }
+      onHome?.();
+    };
+    return () => { backHandlerRef.current = null; };
+  }, [backHandlerRef, reviewingVerification, reviewingPurchase, reviewing,
+      activeAdminSection, availabilityFilter, tab, requestTab, onHome]);
+
+
 
   async function loadAdminData() {
     setLoading(true);
@@ -1946,7 +2064,7 @@ function AdminDashboard({ user, onLogout, onHome, developerMode, onToggleDevelop
   );
 }
 
-function DashboardRouter({ user, onLogout, onHome, openEnquiries, onEnquiriesOpened, enquiryCount, developerMode, onToggleDeveloperMode, logoName, logoSubtitle, logoInitials }) {
+function DashboardRouter({ user, onLogout, onHome, backHandlerRef, openEnquiries, onEnquiriesOpened, enquiryCount, developerMode, onToggleDeveloperMode, logoName, logoSubtitle, logoInitials }) {
   const [role, setRole] = useState(null);
   const [isBlocked, setIsBlocked] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1981,8 +2099,8 @@ function DashboardRouter({ user, onLogout, onHome, openEnquiries, onEnquiriesOpe
   }
 
   return role === 'admin'
-    ? <AdminDashboard user={user} onLogout={onLogout} onHome={onHome} developerMode={developerMode} onToggleDeveloperMode={onToggleDeveloperMode} logoName={logoName} logoSubtitle={logoSubtitle} logoInitials={logoInitials} />
-    : <AgentDashboard user={user} onLogout={onLogout} onHome={onHome} openEnquiries={openEnquiries} onEnquiriesOpened={onEnquiriesOpened} enquiryCount={enquiryCount} logoName={logoName} logoSubtitle={logoSubtitle} logoInitials={logoInitials} />;
+    ? <AdminDashboard user={user} onLogout={onLogout} onHome={onHome} backHandlerRef={backHandlerRef} developerMode={developerMode} onToggleDeveloperMode={onToggleDeveloperMode} logoName={logoName} logoSubtitle={logoSubtitle} logoInitials={logoInitials} />
+    : <AgentDashboard user={user} onLogout={onLogout} onHome={onHome} backHandlerRef={backHandlerRef} openEnquiries={openEnquiries} onEnquiriesOpened={onEnquiriesOpened} enquiryCount={enquiryCount} logoName={logoName} logoSubtitle={logoSubtitle} logoInitials={logoInitials} />;
 }
 
 function App() {
@@ -2179,6 +2297,7 @@ function App() {
 
 
   const [showPageTransition, setShowPageTransition] = useState(false);
+  const backHandlerRef = useRef(null);
   const skipFirstPageTransition = useRef(true);
 
   useEffect(() => {
@@ -2211,6 +2330,57 @@ function App() {
 
 const [adPrivacyOptionsRequired, setAdPrivacyOptionsRequired] = useState(false);
 const [adMobDiagnostic, setAdMobDiagnostic] = useState('AdMob: waiting for setup...');
+
+
+useEffect(() => {
+  if (!Capacitor.isNativePlatform()) return;
+
+  let listenerHandle;
+  let cancelled = false;
+
+  CapacitorApp.addListener('backButton', () => {
+    if (dashboardUser && showDashboard) {
+      backHandlerRef.current?.();
+      return;
+    }
+    if (menuOpen) { setMenuOpen(false); return; }
+    if (navLabelEditorOpen) { setNavLabelEditorOpen(false); return; }
+    if (logoEditorOpen) { setLogoEditorOpen(false); return; }
+    if (headerPhotoEditorOpen) { setHeaderPhotoEditorOpen(false); return; }
+    if (heroHeadlineEditorOpen) { setHeroHeadlineEditorOpen(false); return; }
+    if (heroDescriptionEditorOpen) { setHeroDescriptionEditorOpen(false); return; }
+    if (heroEyebrowEditorOpen) { setHeroEyebrowEditorOpen(false); return; }
+    if (heroSearchButtonEditorOpen) { setHeroSearchButtonEditorOpen(false); return; }
+    if (advancedSearchButtonEditorOpen) { setAdvancedSearchButtonEditorOpen(false); return; }
+    if (advancedSubmitButtonEditorOpen) { setAdvancedSubmitButtonEditorOpen(false); return; }
+    if (selectedEnquiry !== null) { setSelectedEnquiry(null); return; }
+    if (selectedAgentProfile) { setSelectedAgentProfile(null); return; }
+    if (selectedProperty) { setSelectedProperty(null); return; }
+    if (showEnquiryInbox) { setShowEnquiryInbox(false); return; }
+    if (showAdvancedSearchPage) { setShowAdvancedSearchPage(false); return; }
+    if (portalMode) { setPortalMode(null); return; }
+    if (dashboardUser && !showDashboard) { setShowDashboard(true); return; }
+
+    CapacitorApp.exitApp();
+  }).then(handle => {
+    if (cancelled) handle.remove();
+    else listenerHandle = handle;
+  });
+
+  return () => {
+    cancelled = true;
+    listenerHandle?.remove();
+  };
+}, [
+  dashboardUser, showDashboard, menuOpen, navLabelEditorOpen, logoEditorOpen,
+  headerPhotoEditorOpen, heroHeadlineEditorOpen, heroDescriptionEditorOpen,
+  heroEyebrowEditorOpen, heroSearchButtonEditorOpen,
+  advancedSearchButtonEditorOpen, advancedSubmitButtonEditorOpen,
+  selectedEnquiry, selectedAgentProfile, selectedProperty, showEnquiryInbox,
+  showAdvancedSearchPage, portalMode
+]);
+
+
 
 useEffect(() => {
   if (
@@ -2875,7 +3045,7 @@ useEffect(() => {
               return next;
             });
           }}
-          openEnquiries={showEnquiryInbox}
+          openEnquiries={showEnquiryInbox} backHandlerRef={backHandlerRef}
           onEnquiriesOpened={() => setShowEnquiryInbox(false)}
           enquiryCount={agentEnquiryCount}
           onHome={() => setShowDashboard(false)}
