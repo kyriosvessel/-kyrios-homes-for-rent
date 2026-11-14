@@ -2210,6 +2210,7 @@ function App() {
   const [showEnquiryInbox, setShowEnquiryInbox] = useState(false);
 
 const [adPrivacyOptionsRequired, setAdPrivacyOptionsRequired] = useState(false);
+const [adMobDiagnostic, setAdMobDiagnostic] = useState('AdMob: waiting for setup...');
 
 useEffect(() => {
   if (
@@ -2226,6 +2227,7 @@ useEffect(() => {
 
   const setupAds = async () => {
     try {
+      if (active) setAdMobDiagnostic('Checking AdMob consent...');
       let consentInfo = await AdMob.requestConsentInfo();
 
       if (!active) return;
@@ -2244,9 +2246,11 @@ useEffect(() => {
       );
 
       if (!consentInfo.canRequestAds) {
+        setAdMobDiagnostic('AdMob consent does not allow ad requests.');
         console.warn('AdMob: consent does not allow ad requests.', consentInfo);
         return;
       }
+      setAdMobDiagnostic('Consent accepted. Initializing AdMob...');
       console.log('AdMob: consent allows ad requests.');
 
       await AdMob.initialize();
@@ -2267,14 +2271,15 @@ useEffect(() => {
 
       loadedListener = await AdMob.addListener(
         BannerAdPluginEvents.Loaded,
-        () => console.log('AdMob: banner loaded successfully.')
+        () => { if (active) setAdMobDiagnostic('Success: banner ad loaded.'); console.log('AdMob: banner loaded successfully.'); }
       );
 
       failedListener = await AdMob.addListener(
         BannerAdPluginEvents.FailedToLoad,
-        (error) => console.error('AdMob: banner failed to load:', error)
+        (error) => { if (active) setAdMobDiagnostic('Banner failed: ' + String(error?.message || error)); console.error('AdMob: banner failed to load:', error); }
       );
 
+      setAdMobDiagnostic('Requesting banner ad...');
       console.log('AdMob: requesting banner...');
       await AdMob.showBanner({
         adId: 'ca-app-pub-3549722891067696/2166428406',
@@ -2285,6 +2290,7 @@ useEffect(() => {
 
       bannerShown = true;
     } catch (error) {
+      if (active) setAdMobDiagnostic('AdMob setup failed: ' + String(error?.message || error));
       console.error('AdMob setup failed:', error);
     }
   };
@@ -2711,12 +2717,13 @@ useEffect(() => {
   return (
     <main>
       {developerMode && developerAdminVerified && (
-        <div style={{ position: 'fixed', top: '12px', right: '12px', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '10px', background: '#172554', color: '#fff' }}>
+        <div style={{ position: 'fixed', bottom: 'calc(var(--admob-banner-height, 0px) + 16px)', right: '12px', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', maxWidth: 'min(420px, calc(100vw - 24px))', padding: '8px 10px', borderRadius: '10px', background: '#172554', color: '#fff' }}>
           <strong style={{ fontSize: '12px' }}>DEVELOPER MODE</strong><button type="button" onClick={() => setLogoEditorOpen(true)}>Edit Logo</button><button type="button" onClick={() => setHeaderPhotoEditorOpen(true)}>Edit Header Photo</button>
           <button type="button" onClick={() => {
             setDeveloperMode(false);
             sessionStorage.setItem('khDeveloperMode', 'off');
           }}>Exit</button>
+          <small style={{ flexBasis: '100%', maxWidth: '320px', fontSize: '11px', lineHeight: 1.4, overflowWrap: 'anywhere' }}>{adMobDiagnostic}</small>
         </div>
       )}
       {developerMode && developerAdminVerified && logoEditorOpen && (
