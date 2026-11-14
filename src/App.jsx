@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search, MapPin, BedDouble, Bath, Menu, User, ArrowRight, Lock, Mail, Phone, Eye, EyeOff, X } from 'lucide-react';
 import './App.css';
 import { supabase } from './supabase';
@@ -14,26 +14,26 @@ import {
 
 
 
-function BrandLogo() {
+function BrandLogo({ name = "KYRIOS", subtitle = "HOMES FOR RENT", initials = "KH" }) {
   return (
     <a className="brand" href="#" aria-label="Kyrios Homes For Rent home">
       <span className="brand-icon">
         <svg viewBox="0 0 64 64" aria-hidden="true">
           <path className="logo-roof" d="M7 29 32 8l25 21" />
           <path className="logo-house" d="M14 25v31h36V25" />
-          <text x="32" y="45" textAnchor="middle">KH</text>
+          <text x="32" y="45" textAnchor="middle">{initials}</text>
         </svg>
       </span>
       <span className="brand-name">
-        <strong>KYRIOS</strong>
-        <b>HOMES FOR RENT</b>
+        <strong>{name}</strong>
+        <b>{subtitle}</b>
       </span>
     </a>
   );
 }
 
 
-function AgentPortal({ onClose, onLogin, initialMode }) {
+function AgentPortal({ onClose, onLogin, initialMode, logoName, logoSubtitle, logoInitials }) {
   const [mode, setMode] = useState(initialMode || 'login');
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState('');
@@ -111,7 +111,7 @@ function AgentPortal({ onClose, onLogin, initialMode }) {
           <X size={21} />
         </button>
 
-        <BrandLogo />
+        <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
         <div className="portal-heading">
           <span className="eyebrow">KYRIOS AGENT PORTAL</span>
           <h2>{mode === 'login' ? 'Welcome back' : 'Join our agent network'}</h2>
@@ -173,7 +173,7 @@ function AgentPortal({ onClose, onLogin, initialMode }) {
 
 
 
-function AgentDashboard({ user, onLogout, onHome, openEnquiries = false, onEnquiriesOpened, enquiryCount }) {
+function AgentDashboard({ user, onLogout, onHome, openEnquiries = false, onEnquiriesOpened, enquiryCount, logoName, logoSubtitle, logoInitials }) {
   const [profile, setProfile] = useState(null);
   const [points, setPoints] = useState(0);
   const [properties, setProperties] = useState([]);
@@ -197,7 +197,6 @@ function AgentDashboard({ user, onLogout, onHome, openEnquiries = false, onEnqui
   const [showAdvertForm, setShowAdvertForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formMessage, setFormMessage] = useState('');
-  const [firstPaymentTotal, setFirstPaymentTotal] = useState(0);
   const [purchaseRequests, setPurchaseRequests] = useState([]);
   const [purchaseMessage, setPurchaseMessage] = useState('');
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
@@ -227,12 +226,6 @@ function AgentDashboard({ user, onLogout, onHome, openEnquiries = false, onEnqui
 
   function handleEditProperty(property) {
     setEditingProperty(property);
-    setFirstPaymentTotal(
-      Number(property.rent_amount || 0) +
-      Number(property.agreement_fee || 0) +
-      Number(property.agency_fee || 0) +
-      Number(property.caution_fee || 0)
-    );
     setShowAdvertForm(true);
   }
 
@@ -282,7 +275,7 @@ function AgentDashboard({ user, onLogout, onHome, openEnquiries = false, onEnqui
     setLoading(false);
   }
 
-  
+
 async function submitAgentVerification(event) {
     event.preventDefault();
     setVerificationMessage('');
@@ -558,11 +551,7 @@ function openAgentRequest(request) {
         area: form.get('area').trim(),
         address: form.get('address').trim(),
         rent_amount: Number(form.get('rent_amount')),
-        agreement_fee: Number(form.get('agreement_fee') || 0),
-        agency_fee: Number(form.get('agency_fee') || 0),
-        caution_fee: Number(form.get('caution_fee') || 0),
-        bedrooms: Number(form.get('bedrooms') || 0),
-        bathrooms: Number(form.get('bathrooms') || 0),
+        first_payment_total: Number(form.get('first_payment_total')),
         description: form.get('description').trim(),
         contact_phone: form.get('contact_phone').trim()
       };
@@ -575,7 +564,7 @@ function openAgentRequest(request) {
         }).eq('id', editingProperty.id).eq('agent_id', user.id);
         submitError = error;
       } else {
-        const { error } = await supabase.rpc('submit_property_advert', {
+        const { data: propertyId, error } = await supabase.rpc('submit_property_advert', {
           p_title: data.title,
           p_property_type: data.property_type,
           p_state: data.state,
@@ -583,16 +572,24 @@ function openAgentRequest(request) {
           p_area: data.area,
           p_address: data.address,
           p_rent_amount: data.rent_amount,
-          p_agreement_fee: data.agreement_fee,
-          p_agency_fee: data.agency_fee,
-          p_caution_fee: data.caution_fee,
-          p_bedrooms: data.bedrooms,
-          p_bathrooms: data.bathrooms,
+          p_agreement_fee: 0,
+          p_agency_fee: 0,
+          p_caution_fee: 0,
+          p_bedrooms: 0,
+          p_bathrooms: 0,
           p_description: data.description,
           p_contact_phone: data.contact_phone,
           p_photo_urls: uploadedUrls
         });
         submitError = error;
+        if (!submitError) {
+          const { error: paymentError } = await supabase
+            .from('properties')
+            .update({ first_payment_total: data.first_payment_total })
+            .eq('id', propertyId)
+            .eq('agent_id', user.id);
+          submitError = paymentError;
+        }
       }
       if (submitError) throw submitError;
 
@@ -612,7 +609,7 @@ function openAgentRequest(request) {
     return (
       <main className="agent-dashboard">
         <header className="header">
-          <BrandLogo />
+          <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
           <div className="dashboard-actions">
             <button type="button" className="login" onClick={() => setShowVerificationPage(false)}>Back to Dashboard</button>
             <button type="button" className="login" onClick={onLogout}>Logout</button>
@@ -661,13 +658,19 @@ function openAgentRequest(request) {
             )}
           </section>
         </section>
-      </main>
+
+        <footer className="agent-dashboard-footer">
+          <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
+          <p>Helping people find a place to call home.</p>
+          <small>© {new Date().getFullYear()} Kyrios Homes For Rent. All rights reserved.</small>
+        </footer>
+</main>
     );
   }
 
   if (showBuyPoints) {
     return (
-      <main className="agent-dashboard">
+      <main className="agent-dashboard agent-dashboard-agent">
         <section className="dashboard-content">
           <section className="dashboard-panel">
             <button className="login" type="button" onClick={() => setShowBuyPoints(false)}>
@@ -767,7 +770,7 @@ function openAgentRequest(request) {
   return (
     <main className="agent-dashboard">
       <header className="header">
-        <BrandLogo />
+        <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
         <div className="dashboard-actions"><button className="login" onClick={onHome}>Home</button><button className="login" onClick={onLogout}>Logout</button></div>
       </header>
 
@@ -777,35 +780,7 @@ function openAgentRequest(request) {
         <p>Manage your property adverts and account activity.</p>
       </section>
 
-      <section className="dashboard-content">
-        {loading ? <p>Loading your dashboard...</p> : (
-          <>
-            {error && <p className="portal-message">{error}</p>}
-      {newCustomerRequests.length > 0 && (
-        <section className="dashboard-panel admin-new-requests">
-          <span className="eyebrow">NEW CUSTOMER ACTIVITY</span>
-          <h2>New Customer Requests ({newCustomerRequests.length})</h2>
-          <p>Only enquiries for your properties and shared housing requests appear here.</p>
-          <div className="admin-new-request-list">
-            {newCustomerRequests.map(request => (
-              <button
-                type="button"
-                className="admin-new-request"
-                key={request.key}
-                onClick={() => openAgentRequest(request)}
-              >
-                <span className="admin-new-request-type">{request.typeLabel}</span>
-                <strong>{request.customer_name || 'Customer'}</strong>
-                <small>{request.propertyTitle} · {request.customer_phone || 'No phone provided'}</small>
-                <small>{request.created_at ? new Date(request.created_at).toLocaleString('en-NG') : ''}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-
-          <section className="dashboard-panel">
+        <section id="agent-account-points" className="dashboard-panel">
             <span className="eyebrow">ACCOUNT POINTS</span>
             <h2>Buy Points</h2>
             <p>Purchase points using OPay transfer or an MTN recharge card.</p>
@@ -837,7 +812,147 @@ function openAgentRequest(request) {
               </article>
             </div>
 
-            <section className="dashboard-panel">
+
+
+    <section className="dashboard-content">
+        {loading ? <p>Loading your dashboard...</p> : (
+          <>
+            {error && <p className="portal-message">{error}</p>}
+      {newCustomerRequests.length > 0 && (
+        <section id="agent-new-requests" className="dashboard-panel admin-new-requests">
+          <span className="eyebrow">NEW CUSTOMER ACTIVITY</span>
+          <h2>New Customer Requests ({newCustomerRequests.length})</h2>
+          <p>Only enquiries for your properties and shared housing requests appear here.</p>
+          <div className="admin-new-request-list">
+            {newCustomerRequests.map(request => (
+              <button
+                type="button"
+                className="admin-new-request"
+                key={request.key}
+                onClick={() => openAgentRequest(request)}
+              >
+                <span className="admin-new-request-type">{request.typeLabel}</span>
+                <strong>{request.customer_name || 'Customer'}</strong>
+                <small>{request.propertyTitle} · {request.customer_phone || 'No phone provided'}</small>
+                <small>{request.created_at ? new Date(request.created_at).toLocaleString('en-NG') : ''}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+
+
+
+            <section id="agent-property-enquiries" className="dashboard-panel agent-enquiry-panel">
+            <button
+              type="button"
+              className="agent-enquiry-toggle"
+              aria-expanded={showEnquiries}
+              onClick={() => setShowEnquiries(value => !value)}
+            >
+              <span>Property Enquiries ({enquiryCount ?? enquiries.length})</span>
+              <span>{showEnquiries ? 'Hide enquiries' : 'View enquiries'} <ArrowRight size={17} /></span>
+            </button>
+
+            {showEnquiries && (
+              <>
+                <span className="eyebrow">CUSTOMER COMMUNICATION</span>
+                <h2 style={{ color: "#14532d" }}>My Property Enquiries ({enquiries.length})</h2>
+                <p>Messages from customers interested in your property listings.</p>
+                {enquiries.length === 0 ? (
+                  <p>No customer enquiries have been received for your properties yet.</p>
+                ) : (
+                  <div className="dashboard-listings">
+                    {enquiries.map(enquiry => {
+                      const property = properties.find(item => item.id === enquiry.property_id);
+                      const phone = (enquiry.customer_phone || '').replace(/\D/g, '');
+                      const whatsappPhone = phone.startsWith('0') ? '234' + phone.slice(1) : phone;
+                      const whatsappLink = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent('Hello ' + enquiry.customer_name + ', I am contacting you about your property enquiry.')}`;
+
+
+  return (
+                        <article className="dashboard-listing" key={enquiry.id}>
+                          <div>
+                            <strong>{enquiry.customer_name}</strong>
+                            <p>Property: {property?.title || 'Property enquiry'}</p>
+                            <p>Phone: {enquiry.customer_phone}</p>
+                            <p>{enquiry.message}</p>
+                            <small>Received: {new Date(enquiry.created_at).toLocaleString('en-NG')}</small>
+                            <br />
+                            <small>Status: {enquiry.status || 'new'}</small>
+                            <div className="public-property-contact">
+                              <a href={`tel:${enquiry.customer_phone}`}><Phone size={16} /> Call Customer</a>
+                              {whatsappPhone && <a href={whatsappLink} target="_blank" rel="noreferrer">WhatsApp Customer</a>}
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+
+          <section id="agent-housing-requests" className="dashboard-panel agent-enquiry-panel">
+            <button
+              type="button"
+              className="agent-enquiry-toggle"
+              aria-expanded={showHousingRequests}
+              onClick={() => setShowHousingRequests(value => !value)}
+            >
+              <span>Housing Requests ({housingRequests.length})</span>
+              <span>{showHousingRequests ? 'Hide requests' : 'View requests'} <ArrowRight size={17} /></span>
+            </button>
+            {showHousingRequests && (
+              <>
+                <span className="eyebrow">SHARED CUSTOMER REQUESTS</span>
+                <h2 style={{ color: "#14532d" }}>Housing Requests</h2>
+                <p>These requests are visible to all agents.</p>
+                {housingRequests.length === 0 ? (
+                  <p>No housing requests have been received yet.</p>
+                ) : (
+                  <div className="dashboard-listings">
+                    {housingRequests.map(request => (
+                      <article className="dashboard-listing" key={request.id}>
+                        <div>
+                          <strong>{request.customer_name || 'Customer'}</strong>
+                          <p>Location: {[request.area, request.city, request.state].filter(Boolean).join(', ') || 'Not specified'}</p>
+                          <p>Budget: {request.budget || 'Not specified'}</p>
+                          <p>Property type: {request.property_type || 'Not specified'}</p>
+                          <p>Bedrooms: {request.bedrooms || 'Not specified'}</p>
+                          <p>Phone: {request.customer_phone || 'Not provided'}</p>
+                          <p>{request.description || ''}</p>
+                          <small>Received: {request.created_at ? new Date(request.created_at).toLocaleString('en-NG') : ''}</small>
+                          <br />
+                          <small>Status: {request.status || 'new'}</small>
+                          {request.customer_phone && (
+                            <div className="public-property-contact">
+                              <a href={`tel:${request.customer_phone}`}><Phone size={16} /> Call Customer</a>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+
+
+<section className="dashboard-panel">
+  <span className="eyebrow">ACCOUNT SECURITY</span>
+  <h2>Identity Verification</h2>
+  <p>Verify your identity to build trust with customers.</p>
+  {verification && <p>Status: <strong>{verification.status.toUpperCase()}</strong></p>}
+  <button type="button" className="portal-submit" onClick={() => setShowVerificationPage(true)}>
+    {verification ? 'View Verification' : 'Verify Account'}
+  </button>
+</section>
+
+<section id="agent-property-listings" className="dashboard-panel">
               <div className="dashboard-panel-heading">
                 <div>
                   <span className="eyebrow">PROPERTY MANAGEMENT</span>
@@ -868,14 +983,6 @@ function openAgentRequest(request) {
                   key={editingProperty?.id || "new-advert"}
                   className="advert-form"
                   onSubmit={handleAdvertSubmit}
-                  onChange={e => {
-                    const f = new FormData(e.currentTarget);
-                    const rent = Number(f.get('rent_amount') || 0);
-                    const agreement = Number(f.get('agreement_fee') || 0);
-                    const agency = Number(f.get('agency_fee') || 0);
-                    const caution = Number(f.get('caution_fee') || 0);
-                    setFirstPaymentTotal(rent + agreement + agency + caution);
-                  }}
                 >
                   <h3>Property Information</h3>
 
@@ -923,33 +1030,9 @@ function openAgentRequest(request) {
                     <input name="rent_amount" type="number" min="1" step="0.01" required defaultValue={editingProperty?.rent_amount ?? ""} placeholder="e.g. 1200000" />
                   </label>
 
-                  <label>Agreement fee (₦)
-                    <input name="agreement_fee" type="number" min="0" step="0.01" defaultValue={editingProperty?.agreement_fee ?? 0} />
+                  <label>First Payment (₦) *
+                    <input name="first_payment_total" type="number" min="1" step="0.01" required defaultValue={editingProperty?.first_payment_total ?? editingProperty?.rent_amount ?? ""} placeholder="Enter the first payment amount" />
                   </label>
-
-                  <label>Agency fee (₦)
-                    <input name="agency_fee" type="number" min="0" step="0.01" defaultValue={editingProperty?.agency_fee ?? 0} />
-                  </label>
-
-                  <label>Caution fee (₦)
-                    <input name="caution_fee" type="number" min="0" step="0.01" defaultValue={editingProperty?.caution_fee ?? 0} />
-                  </label>
-
-                  <div className="first-payment-preview">
-                    <span>Total first payment</span>
-                    <strong>₦{firstPaymentTotal.toLocaleString("en-NG")}</strong>
-                    <small>Annual rent + agreement + agency + caution fees</small>
-                  </div>
-
-                  <h3>Property Details</h3>
-                  <div className="advert-form-grid">
-                    <label>Bedrooms
-                      <input name="bedrooms" type="number" min="0" step="1" defaultValue={editingProperty?.bedrooms ?? 0} />
-                    </label>
-                    <label>Bathrooms
-                      <input name="bathrooms" type="number" min="0" step="1" defaultValue={editingProperty?.bathrooms ?? 0} />
-                    </label>
-                  </div>
 
                   <label>Description
                     <textarea name="description" defaultValue={editingProperty?.description || ""} rows="5" placeholder="Describe the property, facilities, condition and nearby landmarks." />
@@ -1073,121 +1156,6 @@ function openAgentRequest(request) {
               )}
             </section>
 
-            <section className="dashboard-panel agent-enquiry-panel">
-            <button
-              type="button"
-              className="agent-enquiry-toggle"
-              aria-expanded={showEnquiries}
-              onClick={() => setShowEnquiries(value => !value)}
-            >
-              <span>Property Enquiries ({enquiryCount ?? enquiries.length})</span>
-              <span>{showEnquiries ? 'Hide enquiries' : 'View enquiries'} <ArrowRight size={17} /></span>
-            </button>
-
-            {showEnquiries && (
-              <>
-                <span className="eyebrow">CUSTOMER COMMUNICATION</span>
-                <h2 style={{ color: "#14532d" }}>My Property Enquiries ({enquiries.length})</h2>
-                <p>Messages from customers interested in your property listings.</p>
-                {enquiries.length === 0 ? (
-                  <p>No customer enquiries have been received for your properties yet.</p>
-                ) : (
-                  <div className="dashboard-listings">
-                    {enquiries.map(enquiry => {
-                      const property = properties.find(item => item.id === enquiry.property_id);
-                      const phone = (enquiry.customer_phone || '').replace(/\D/g, '');
-                      const whatsappPhone = phone.startsWith('0') ? '234' + phone.slice(1) : phone;
-                      const whatsappLink = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent('Hello ' + enquiry.customer_name + ', I am contacting you about your property enquiry.')}`;
-                    
-
-  return (
-                        <article className="dashboard-listing" key={enquiry.id}>
-                          <div>
-                            <strong>{enquiry.customer_name}</strong>
-                            <p>Property: {property?.title || 'Property enquiry'}</p>
-                            <p>Phone: {enquiry.customer_phone}</p>
-                            <p>{enquiry.message}</p>
-                            <small>Received: {new Date(enquiry.created_at).toLocaleString('en-NG')}</small>
-                            <br />
-                            <small>Status: {enquiry.status || 'new'}</small>
-                            <div className="public-property-contact">
-                              <a href={`tel:${enquiry.customer_phone}`}><Phone size={16} /> Call Customer</a>
-                              {whatsappPhone && <a href={whatsappLink} target="_blank" rel="noreferrer">WhatsApp Customer</a>}
-                            </div>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-          <section className="dashboard-panel agent-enquiry-panel">
-            <button
-              type="button"
-              className="agent-enquiry-toggle"
-              aria-expanded={showHousingRequests}
-              onClick={() => setShowHousingRequests(value => !value)}
-            >
-              <span>Housing Requests ({housingRequests.length})</span>
-              <span>{showHousingRequests ? 'Hide requests' : 'View requests'} <ArrowRight size={17} /></span>
-            </button>
-            {showHousingRequests && (
-              <>
-                <span className="eyebrow">SHARED CUSTOMER REQUESTS</span>
-                <h2 style={{ color: "#14532d" }}>Housing Requests</h2>
-                <p>These requests are visible to all agents.</p>
-                {housingRequests.length === 0 ? (
-                  <p>No housing requests have been received yet.</p>
-                ) : (
-                  <div className="dashboard-listings">
-                    {housingRequests.map(request => (
-                      <article className="dashboard-listing" key={request.id}>
-                        <div>
-                          <strong>{request.customer_name || 'Customer'}</strong>
-                          <p>Location: {[request.area, request.city, request.state].filter(Boolean).join(', ') || 'Not specified'}</p>
-                          <p>Budget: {request.budget || 'Not specified'}</p>
-                          <p>Property type: {request.property_type || 'Not specified'}</p>
-                          <p>Bedrooms: {request.bedrooms || 'Not specified'}</p>
-                          <p>Phone: {request.customer_phone || 'Not provided'}</p>
-                          <p>{request.description || ''}</p>
-                          <small>Received: {request.created_at ? new Date(request.created_at).toLocaleString('en-NG') : ''}</small>
-                          <br />
-                          <small>Status: {request.status || 'new'}</small>
-                          {request.customer_phone && (
-                            <div className="public-property-contact">
-                              <a href={`tel:${request.customer_phone}`}><Phone size={16} /> Call Customer</a>
-                            </div>
-                          )}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-          
-<section className="dashboard-panel">
-  <span className="eyebrow">ACCOUNT SECURITY</span>
-  <h2>Identity Verification</h2>
-  <p>Verify your identity to build trust with customers.</p>
-  {verification && <p>Status: <strong>{verification.status.toUpperCase()}</strong></p>}
-  <button type="button" className="portal-submit" onClick={() => setShowVerificationPage(true)}>
-    {verification ? 'View Verification' : 'Verify Account'}
-  </button>
-</section>
-
-<section className="dashboard-panel">
-              <span className="eyebrow">ACCOUNT INFORMATION</span>
-              <h2>My Profile</h2>
-              <p>{profile?.full_name || 'Name not available'}</p>
-              <p>{profile?.phone || 'Phone not available'}</p>
-              <p>{user.email}</p>
-            </section>
           </>
         )}
       </section>
@@ -1197,7 +1165,7 @@ function openAgentRequest(request) {
 
 
 
-function AdminDashboard({ user, onLogout, onHome }) {
+function AdminDashboard({ user, onLogout, onHome, developerMode, onToggleDeveloperMode, logoName, logoSubtitle, logoInitials }) {
   const [properties, setProperties] = useState([]);
   const [agents, setAgents] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
@@ -1452,8 +1420,16 @@ function AdminDashboard({ user, onLogout, onHome }) {
   return (
     <main className="agent-dashboard">
       <header className="header">
-        <BrandLogo />
-        <div className="dashboard-actions"><button className="login" onClick={onHome}>Home</button><button className="login" onClick={onLogout}>Logout</button></div>
+        <BrandLogo name={logoName} subtitle={logoSubtitle} initials={logoInitials} />
+        <div className="dashboard-actions"><button
+            type="button"
+            className="login"
+            aria-pressed={developerMode}
+            onClick={onToggleDeveloperMode}
+          >
+            {developerMode ? 'Exit Developer Mode' : 'Enter Developer Mode'}
+          </button>
+          <button className="login" onClick={onHome}>Home</button><button className="login" onClick={onLogout}>Logout</button></div>
       </header>
 
       <section className="dashboard-welcome admin-welcome">
@@ -1626,7 +1602,7 @@ function AdminDashboard({ user, onLogout, onHome }) {
                       </button>
                     </div>
                   )}
-                
+
                   <button
                     type="button"
                     className="admin-reject"
@@ -1648,7 +1624,7 @@ function AdminDashboard({ user, onLogout, onHome }) {
           )}
         </section>
 
-        
+
           </>
         )}
 
@@ -1787,8 +1763,8 @@ function AdminDashboard({ user, onLogout, onHome }) {
           )}
         </section>
 
-        
-          
+
+
           </>
         )}
 
@@ -1899,7 +1875,7 @@ function AdminDashboard({ user, onLogout, onHome }) {
         )}
 
 
-      
+
           {activeAdminSection === 'verifications' && (
             <section className="dashboard-panel">
               <div className="dashboard-panel-heading">
@@ -1970,7 +1946,7 @@ function AdminDashboard({ user, onLogout, onHome }) {
   );
 }
 
-function DashboardRouter({ user, onLogout, onHome, openEnquiries, onEnquiriesOpened, enquiryCount }) {
+function DashboardRouter({ user, onLogout, onHome, openEnquiries, onEnquiriesOpened, enquiryCount, developerMode, onToggleDeveloperMode, logoName, logoSubtitle, logoInitials }) {
   const [role, setRole] = useState(null);
   const [isBlocked, setIsBlocked] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -2005,8 +1981,8 @@ function DashboardRouter({ user, onLogout, onHome, openEnquiries, onEnquiriesOpe
   }
 
   return role === 'admin'
-    ? <AdminDashboard user={user} onLogout={onLogout} onHome={onHome} />
-    : <AgentDashboard user={user} onLogout={onLogout} onHome={onHome} openEnquiries={openEnquiries} onEnquiriesOpened={onEnquiriesOpened} enquiryCount={enquiryCount} />;
+    ? <AdminDashboard user={user} onLogout={onLogout} onHome={onHome} developerMode={developerMode} onToggleDeveloperMode={onToggleDeveloperMode} logoName={logoName} logoSubtitle={logoSubtitle} logoInitials={logoInitials} />
+    : <AgentDashboard user={user} onLogout={onLogout} onHome={onHome} openEnquiries={openEnquiries} onEnquiriesOpened={onEnquiriesOpened} enquiryCount={enquiryCount} logoName={logoName} logoSubtitle={logoSubtitle} logoInitials={logoInitials} />;
 }
 
 function App() {
@@ -2021,9 +1997,144 @@ function App() {
   const [maxRent, setMaxRent] = useState('');
   const [filterBedrooms, setFilterBedrooms] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const defaultNavLabels = {findHomes:"Find Homes",forAgents:"For Agents",about:"About",dashboard:"Dashboard",logout:"Logout",agentLogin:"Agent Login"};
+  const [navLabels,setNavLabels] = useState(() => {try{return {...defaultNavLabels,...JSON.parse(localStorage.getItem("khNavLabels") || "{}")};}catch{return defaultNavLabels;}});
+  const [navLabelDraft,setNavLabelDraft] = useState("");
+  const [navLabelEditorKey,setNavLabelEditorKey] = useState("");
+  const [navLabelEditorOpen,setNavLabelEditorOpen] = useState(false);
+  const [logoEditorOpen,setLogoEditorOpen] = useState(false);
+  const [logoNameDraft,setLogoNameDraft] = useState(() => localStorage.getItem("khLogoName") || "KYRIOS");
+  const [logoSubtitleDraft,setLogoSubtitleDraft] = useState(() => localStorage.getItem("khLogoSubtitle") || "HOMES FOR RENT");
+  const [logoInitialsDraft,setLogoInitialsDraft] = useState(() => localStorage.getItem("khLogoInitials") || "KH");
+  const [headerPhotoEditorOpen,setHeaderPhotoEditorOpen] = useState(false);
+  const [headerPhoto,setHeaderPhoto] = useState(() => localStorage.getItem("khHeaderPhoto") || "");
+  const [headerPhotoDraft,setHeaderPhotoDraft] = useState(() => localStorage.getItem("khHeaderPhoto") || "");
+  useEffect(() => {
+    document.documentElement.style.setProperty("--kh-header-photo", headerPhoto ? `url("${headerPhoto}")` : "none");
+  }, [headerPhoto]);
+  async function handleHeaderPhotoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 1600 / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(async blob => {
+        try {
+          if (!blob) throw new Error("Could not compress this image.");
+          const filePath = `header/header-${Date.now()}.jpg`;
+          const { error } = await supabase.storage
+            .from("website-assets")
+            .upload(filePath, blob, { contentType: "image/jpeg", upsert: true });
+          if (error) throw error;
+          const { data } = supabase.storage.from("website-assets").getPublicUrl(filePath);
+          setHeaderPhotoDraft(data.publicUrl);
+          setHeaderPhoto(data.publicUrl);
+        } catch (error) {
+          alert("Photo upload failed: " + error.message);
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }, "image/jpeg", 0.78);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      alert("Could not read this image. Please choose another.");
+    };
+    img.src = url;
+  }
+
+
   const [portalMode, setPortalMode] = useState(null);
   const [dashboardUser, setDashboardUser] = useState(null);
   const [showDashboard, setShowDashboard] = useState(true);
+  const [developerMode, setDeveloperMode] = useState(
+    () => sessionStorage.getItem('khDeveloperMode') === 'on'
+  );
+  const [developerAdminVerified, setDeveloperAdminVerified] = useState(false);
+  const [heroHeadline, setHeroHeadline] = useState(() => localStorage.getItem('khHeroHeadline') || 'Find a place you can call home.');
+  const [heroHeadlineDraft, setHeroHeadlineDraft] = useState('');
+  const [heroHeadlineEditorOpen, setHeroHeadlineEditorOpen] = useState(false);
+  const [heroDescription, setHeroDescription] = useState(() => localStorage.getItem("khHeroDescription") || "Discover houses and apartments for rent. Connect directly with verified agents and find a home that fits your budget.");
+  const [heroDescriptionDraft, setHeroDescriptionDraft] = useState("");
+  const [heroDescriptionEditorOpen, setHeroDescriptionEditorOpen] = useState(false);
+  const [heroEyebrow, setHeroEyebrow] = useState(() => localStorage.getItem("khHeroEyebrow") || "YOUR NEXT HOME STARTS HERE");
+  const [heroEyebrowDraft, setHeroEyebrowDraft] = useState("");
+  const [heroEyebrowEditorOpen, setHeroEyebrowEditorOpen] = useState(false);
+  const [heroSearchButton, setHeroSearchButton] = useState(() => localStorage.getItem("khHeroSearchButton") || "Search Homes");
+  const [heroSearchButtonDraft, setHeroSearchButtonDraft] = useState("");
+  const [heroSearchButtonEditorOpen, setHeroSearchButtonEditorOpen] = useState(false);
+  const [advancedSearchButton, setAdvancedSearchButton] = useState(() => localStorage.getItem("khAdvancedSearchButton") || "Advanced Property Search");
+  const [advancedSearchButtonDraft, setAdvancedSearchButtonDraft] = useState("");
+  const [advancedSearchButtonEditorOpen, setAdvancedSearchButtonEditorOpen] = useState(false);
+  const [advancedSubmitButton, setAdvancedSubmitButton] = useState(() => localStorage.getItem("khAdvancedSubmitButton") || "Search Properties");
+  const [advancedSubmitButtonDraft, setAdvancedSubmitButtonDraft] = useState("");
+  const [advancedSubmitButtonEditorOpen, setAdvancedSubmitButtonEditorOpen] = useState(false);
+  const [siteSettings, setSiteSettings] = useState({});
+  const [siteSettingsLoaded, setSiteSettingsLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    async function loadSiteSettings() {
+      const { data, error } = await supabase
+        .from("site_settings")
+        .select("setting_value")
+        .eq("setting_key", "public")
+        .maybeSingle();
+
+      if (!active) return;
+      if (error) {
+        console.error("Could not load website settings:", error.message);
+        setSiteSettingsLoaded(true);
+        return;
+      }
+
+      const value = data?.setting_value || {};
+      setSiteSettings(value);
+      if (value.heroHeadline) setHeroHeadline(value.heroHeadline);
+      if (value.heroDescription) setHeroDescription(value.heroDescription);
+      if (value.heroEyebrow) setHeroEyebrow(value.heroEyebrow);
+      if (value.heroSearchButton) setHeroSearchButton(value.heroSearchButton);
+      if (value.advancedSearchButton) setAdvancedSearchButton(value.advancedSearchButton);
+      if (value.advancedSubmitButton) setAdvancedSubmitButton(value.advancedSubmitButton);
+      if (value.navLabels) setNavLabels(previous => ({ ...previous, ...value.navLabels }));
+      if (value.logoName) setLogoNameDraft(value.logoName);
+      if (value.logoSubtitle) setLogoSubtitleDraft(value.logoSubtitle);
+      if (value.logoInitials) setLogoInitialsDraft(value.logoInitials);
+      if (value.headerPhoto) {
+        setHeaderPhoto(value.headerPhoto);
+        setHeaderPhotoDraft(value.headerPhoto);
+      }
+      setSiteSettingsLoaded(true);
+    }
+
+    loadSiteSettings();
+    return () => { active = false; };
+  }, []);
+
+  async function publishSiteSettings(patch) {
+    const updated = { ...siteSettings, ...patch };
+    const { error } = await supabase
+      .from("site_settings")
+      .upsert({
+        setting_key: "public",
+        setting_value: updated,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "setting_key" });
+
+    if (error) {
+      alert("Could not publish changes: " + error.message);
+      return false;
+    }
+
+    setSiteSettings(updated);
+    return true;
+  }
+
   const [authLoading, setAuthLoading] = useState(true);
   const [properties, setProperties] = useState([]);
   const [featuredPromotions, setFeaturedPromotions] = useState([]);
@@ -2033,7 +2144,61 @@ function App() {
   const [propertiesError, setPropertiesError] = useState('');
   const [selectedEnquiry, setSelectedEnquiry] = useState(null);
   const [selectedProperty, setSelectedProperty] = useState(null);
+  const [recentlyViewedIds, setRecentlyViewedIds] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('recentlyViewedProperties') || '[]');
+      return Array.isArray(saved) ? saved.filter(id => typeof id === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [selectedAgentProfile, setSelectedAgentProfile] = useState(null);
+
+  function recordPropertyView(propertyId) {
+    if (!propertyId) return;
+
+    setRecentlyViewedIds(previous => {
+      const updated = [
+        String(propertyId),
+        ...previous.filter(id => id !== String(propertyId))
+      ].slice(0, 30);
+
+      try {
+        localStorage.setItem(
+          'recentlyViewedProperties',
+          JSON.stringify(updated)
+        );
+      } catch (error) {
+        console.warn('Could not save recently viewed properties:', error);
+      }
+
+      return updated;
+    });
+  }
+
+
+  const [showPageTransition, setShowPageTransition] = useState(false);
+  const skipFirstPageTransition = useRef(true);
+
+  useEffect(() => {
+    if (skipFirstPageTransition.current) {
+      skipFirstPageTransition.current = false;
+      return;
+    }
+    setShowPageTransition(true);
+    const timer = window.setTimeout(() => setShowPageTransition(false), 1000);
+    return () => window.clearTimeout(timer);
+  }, [
+    portalMode,
+    dashboardUser?.id,
+    showDashboard,
+    showAdvancedSearchPage,
+    selectedEnquiry?.id,
+    selectedProperty?.id,
+    selectedAgentProfile
+  ]);
+
   const [enquirySubmitting, setEnquirySubmitting] = useState(false);
   const [enquiryFeedback, setEnquiryFeedback] = useState('');
   const [housingSubmitting, setHousingSubmitting] = useState(false);
@@ -2055,6 +2220,8 @@ useEffect(() => {
 
   let active = true;
   let sizeListener = null;
+  let loadedListener = null;
+  let failedListener = null;
   let bannerShown = false;
 
   const setupAds = async () => {
@@ -2076,7 +2243,11 @@ useEffect(() => {
         consentInfo.privacyOptionsRequirementStatus === 'REQUIRED'
       );
 
-      if (!consentInfo.canRequestAds) return;
+      if (!consentInfo.canRequestAds) {
+        console.warn('AdMob: consent does not allow ad requests.', consentInfo);
+        return;
+      }
+      console.log('AdMob: consent allows ad requests.');
 
       await AdMob.initialize();
 
@@ -2094,6 +2265,17 @@ useEffect(() => {
         }
       );
 
+      loadedListener = await AdMob.addListener(
+        BannerAdPluginEvents.Loaded,
+        () => console.log('AdMob: banner loaded successfully.')
+      );
+
+      failedListener = await AdMob.addListener(
+        BannerAdPluginEvents.FailedToLoad,
+        (error) => console.error('AdMob: banner failed to load:', error)
+      );
+
+      console.log('AdMob: requesting banner...');
       await AdMob.showBanner({
         adId: 'ca-app-pub-3549722891067696/2166428406',
         adSize: BannerAdSize.ADAPTIVE_BANNER,
@@ -2114,6 +2296,8 @@ useEffect(() => {
     document.documentElement.style.removeProperty('--admob-banner-height');
 
     if (sizeListener) sizeListener.remove();
+    if (loadedListener) loadedListener.remove();
+    if (failedListener) failedListener.remove();
 
     if (bannerShown) {
       AdMob.removeBanner().catch((error) => {
@@ -2170,6 +2354,38 @@ useEffect(() => {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function verifyDeveloperAdmin() {
+      if (!dashboardUser?.id) {
+        setDeveloperAdminVerified(false);
+        setDeveloperMode(false);
+        sessionStorage.removeItem('khDeveloperMode');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', dashboardUser.id)
+        .maybeSingle();
+
+      if (!active) return;
+
+      const isAdmin = !error && data?.role === 'admin';
+      setDeveloperAdminVerified(isAdmin);
+
+      if (!isAdmin) {
+        setDeveloperMode(false);
+        sessionStorage.removeItem('khDeveloperMode');
+      }
+    }
+
+    verifyDeveloperAdmin();
+    return () => { active = false; };
+  }, [dashboardUser?.id]);
 
   useEffect(() => {
     if (!dashboardUser?.id) {
@@ -2326,6 +2542,30 @@ useEffect(() => {
     }
 
     loadApprovedProperties();
+
+    const channel = supabase
+      .channel('homepage-approved-properties')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'properties' },
+        () => loadApprovedProperties()
+      )
+      .subscribe();
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadApprovedProperties();
+      }
+    };
+
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -2400,6 +2640,19 @@ useEffect(() => {
       areaMatches && typeMatches && minRentMatches && maxRentMatches && bedroomsMatches;
   });
 
+  const recentlyViewedSet = new Set(recentlyViewedIds);
+
+  const recentlyViewedFirst = [...filtered].sort((a, b) => {
+    const aIndex = recentlyViewedIds.indexOf(String(a.id));
+    const bIndex = recentlyViewedIds.indexOf(String(b.id));
+
+    if (aIndex === -1 && bIndex === -1) return 0;
+    if (aIndex === -1) return 1;
+    if (bIndex === -1) return -1;
+
+    return aIndex - bIndex;
+  });
+
   const formatNaira = amount =>
     '₦' + Number(amount || 0).toLocaleString('en-NG');
 
@@ -2457,6 +2710,132 @@ useEffect(() => {
 
   return (
     <main>
+      {developerMode && developerAdminVerified && (
+        <div style={{ position: 'fixed', top: '12px', right: '12px', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '10px', background: '#172554', color: '#fff' }}>
+          <strong style={{ fontSize: '12px' }}>DEVELOPER MODE</strong><button type="button" onClick={() => setLogoEditorOpen(true)}>Edit Logo</button><button type="button" onClick={() => setHeaderPhotoEditorOpen(true)}>Edit Header Photo</button>
+          <button type="button" onClick={() => {
+            setDeveloperMode(false);
+            sessionStorage.setItem('khDeveloperMode', 'off');
+          }}>Exit</button>
+        </div>
+      )}
+      {developerMode && developerAdminVerified && logoEditorOpen && (
+        <div style={{position:"fixed",top:"70px",right:"12px",zIndex:10001,width:"min(360px,calc(100vw - 24px))",padding:"16px",background:"#fff",color:"#172554",border:"1px solid #cbd5e1",borderRadius:"12px",boxShadow:"0 12px 35px #0003"}}>
+          <h3>Edit Website Logo</h3>
+          <label>Brand name</label>
+          <input value={logoNameDraft} onChange={e => setLogoNameDraft(e.target.value)} style={{width:"100%",padding:"10px",boxSizing:"border-box"}} />
+          <label>Subtitle</label>
+          <input value={logoSubtitleDraft} onChange={e => setLogoSubtitleDraft(e.target.value)} style={{width:"100%",padding:"10px",boxSizing:"border-box"}} />
+          <label>Logo initials</label>
+          <input value={logoInitialsDraft} onChange={e => setLogoInitialsDraft(e.target.value)} style={{width:"100%",padding:"10px",boxSizing:"border-box"}} />
+          <div style={{display:"flex",gap:"7px",marginTop:"12px"}}>
+            <button type="button" onClick={async () => {if(await publishSiteSettings({logoName:logoNameDraft,logoSubtitle:logoSubtitleDraft,logoInitials:logoInitialsDraft})){setLogoEditorOpen(false);}}}>Publish Changes</button>
+            <button type="button" onClick={() => setLogoEditorOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+      {developerMode && developerAdminVerified && headerPhotoEditorOpen && (
+        <div style={{position:"fixed",top:"70px",right:"12px",zIndex:10002,width:"min(360px,calc(100vw - 24px))",maxHeight:"80vh",overflowY:"auto",padding:"16px",background:"#fff",color:"#172554",border:"1px solid #cbd5e1",borderRadius:"12px",boxShadow:"0 12px 35px #0003"}}>
+          <h3>Edit Header Background Photo</h3>
+          <input type="file" accept="image/*" onChange={handleHeaderPhotoUpload} />
+          {headerPhotoDraft && <img src={headerPhotoDraft} alt="Header background preview" style={{width:"100%",height:"100px",objectFit:"cover",marginTop:"10px",borderRadius:"8px"}} />}
+          <p style={{fontSize:"12px"}}>The photo fits the existing header size. It will be cropped neatly, not stretched.</p>
+          <div style={{display:"flex",gap:"7px",marginTop:"12px",flexWrap:"wrap"}}>
+            <button type="button" onClick={async () => {if(await publishSiteSettings({headerPhoto:headerPhotoDraft})){setHeaderPhoto(headerPhotoDraft);setHeaderPhotoEditorOpen(false);}}}>Publish Photo</button>
+            <button type="button" onClick={async () => {if(await publishSiteSettings({headerPhoto:""})){setHeaderPhoto("");setHeaderPhotoDraft("");}}}>Remove Photo</button>
+            <button type="button" onClick={() => setHeaderPhotoEditorOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {developerMode && developerAdminVerified && heroHeadlineEditorOpen && (
+        <div style={{position:"fixed",top:"70px",right:"12px",zIndex:10000,width:"min(360px,calc(100vw - 24px))",padding:"16px",background:"#fff",color:"#172554",border:"1px solid #cbd5e1",borderRadius:"12px",boxShadow:"0 12px 35px #0003"}}>
+          <h3>Edit homepage headline</h3>
+          <textarea value={heroHeadlineDraft} onChange={e => setHeroHeadlineDraft(e.target.value)} rows={4} style={{width:"100%",padding:"10px",boxSizing:"border-box"}} />
+          <div style={{display:"flex",gap:"7px",marginTop:"10px"}}>
+            <button type="button" onClick={() => setHeroHeadline(heroHeadlineDraft)}>Preview</button>
+            <button type="button" onClick={async () => {if(await publishSiteSettings({heroHeadline:heroHeadlineDraft})){setHeroHeadline(heroHeadlineDraft);setHeroHeadlineEditorOpen(false);}}}>Publish Changes</button>
+            <button type="button" onClick={() => setHeroHeadlineEditorOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+      {developerMode && developerAdminVerified && heroDescriptionEditorOpen && (
+        <div style={{position:"fixed",top:"70px",right:"12px",zIndex:10000,width:"min(360px,calc(100vw - 24px))",padding:"16px",background:"#fff",color:"#172554",border:"1px solid #cbd5e1",borderRadius:"12px",boxShadow:"0 12px 35px #0003"}}>
+          <h3>Edit homepage description</h3>
+          <textarea value={heroDescriptionDraft} onChange={e => setHeroDescriptionDraft(e.target.value)} rows={5} style={{width:"100%",padding:"10px",boxSizing:"border-box"}} />
+          <div style={{display:"flex",gap:"7px",marginTop:"10px"}}>
+            <button type="button" onClick={() => setHeroDescription(heroDescriptionDraft)}>Preview</button>
+            <button type="button" onClick={async () => {if(await publishSiteSettings({heroDescription:heroDescriptionDraft})){setHeroDescription(heroDescriptionDraft);setHeroDescriptionEditorOpen(false);}}}>Publish Changes</button>
+            <button type="button" onClick={() => setHeroDescriptionEditorOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+      {developerMode && developerAdminVerified && heroEyebrowEditorOpen && (
+        <div style={{position:"fixed",top:"70px",right:"12px",zIndex:10000,width:"min(360px,calc(100vw - 24px))",padding:"16px",background:"#fff",color:"#172554",border:"1px solid #cbd5e1",borderRadius:"12px",boxShadow:"0 12px 35px #0003"}}>
+          <h3>Edit homepage eyebrow text</h3>
+          <input value={heroEyebrowDraft} onChange={e => setHeroEyebrowDraft(e.target.value)} style={{width:"100%",padding:"10px",boxSizing:"border-box"}} />
+          <div style={{display:"flex",gap:"7px",marginTop:"10px"}}>
+            <button type="button" onClick={() => setHeroEyebrow(heroEyebrowDraft)}>Preview</button>
+            <button type="button" onClick={async () => {if(await publishSiteSettings({heroEyebrow:heroEyebrowDraft})){setHeroEyebrow(heroEyebrowDraft);setHeroEyebrowEditorOpen(false);}}}>Publish Changes</button>
+            <button type="button" onClick={() => setHeroEyebrowEditorOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+      {developerMode && developerAdminVerified && heroSearchButtonEditorOpen && (
+        <div style={{position:"fixed",top:"70px",right:"12px",zIndex:10000,width:"min(360px,calc(100vw - 24px))",padding:"16px",background:"#fff",color:"#172554",border:"1px solid #cbd5e1",borderRadius:"12px",boxShadow:"0 12px 35px #0003"}}>
+          <h3>Edit homepage search button</h3>
+          <input value={heroSearchButtonDraft} onChange={e => setHeroSearchButtonDraft(e.target.value)} style={{width:"100%",padding:"10px",boxSizing:"border-box"}} />
+          <div style={{display:"flex",gap:"7px",marginTop:"10px"}}>
+            <button type="button" onClick={() => setHeroSearchButton(heroSearchButtonDraft)}>Preview</button>
+            <button type="button" onClick={async () => {if(await publishSiteSettings({heroSearchButton:heroSearchButtonDraft})){setHeroSearchButton(heroSearchButtonDraft);setHeroSearchButtonEditorOpen(false);}}}>Publish Changes</button>
+            <button type="button" onClick={() => setHeroSearchButtonEditorOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+      {developerMode && developerAdminVerified && advancedSearchButtonEditorOpen && (
+        <div style={{position:"fixed",top:"70px",right:"12px",zIndex:10000,width:"min(360px,calc(100vw - 24px))",padding:"16px",background:"#fff",color:"#172554",border:"1px solid #cbd5e1",borderRadius:"12px",boxShadow:"0 12px 35px #0003"}}>
+          <h3>Edit advanced search button</h3>
+          <input value={advancedSearchButtonDraft} onChange={e => setAdvancedSearchButtonDraft(e.target.value)} style={{width:"100%",padding:"10px",boxSizing:"border-box"}} />
+          <div style={{display:"flex",gap:"7px",marginTop:"10px"}}>
+            <button type="button" onClick={() => setAdvancedSearchButton(advancedSearchButtonDraft)}>Preview</button>
+            <button type="button" onClick={async () => {if(await publishSiteSettings({advancedSearchButton:advancedSearchButtonDraft})){setAdvancedSearchButton(advancedSearchButtonDraft);setAdvancedSearchButtonEditorOpen(false);}}}>Publish Changes</button>
+            <button type="button" onClick={() => setAdvancedSearchButtonEditorOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+      {developerMode && developerAdminVerified && advancedSubmitButtonEditorOpen && (
+        <div style={{position:"fixed",top:"70px",right:"12px",zIndex:10000,width:"min(360px,calc(100vw - 24px))",padding:"16px",background:"#fff",color:"#172554",border:"1px solid #cbd5e1",borderRadius:"12px",boxShadow:"0 12px 35px #0003"}}>
+          <h3>Edit Search Properties button</h3>
+          <input value={advancedSubmitButtonDraft} onChange={e => setAdvancedSubmitButtonDraft(e.target.value)} style={{width:"100%",padding:"10px",boxSizing:"border-box"}} />
+          <div style={{display:"flex",gap:"7px",marginTop:"10px"}}>
+            <button type="button" onClick={() => setAdvancedSubmitButton(advancedSubmitButtonDraft)}>Preview</button>
+            <button type="button" onClick={async () => {if(await publishSiteSettings({advancedSubmitButton:advancedSubmitButtonDraft})){setAdvancedSubmitButton(advancedSubmitButtonDraft);setAdvancedSubmitButtonEditorOpen(false);}}}>Publish Changes</button>
+            <button type="button" onClick={() => setAdvancedSubmitButtonEditorOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+      {developerMode && developerAdminVerified && navLabelEditorOpen && (
+        <div style={{position:"fixed",top:"70px",right:"12px",zIndex:10001,width:"min(360px,calc(100vw - 24px))",padding:"16px",background:"#fff",color:"#172554",border:"1px solid #cbd5e1",borderRadius:"12px",boxShadow:"0 12px 35px #0003"}}>
+          <h3>Edit navigation label</h3>
+          <input value={navLabelDraft} onChange={e => setNavLabelDraft(e.target.value)} style={{width:"100%",padding:"10px",boxSizing:"border-box"}} />
+          <div style={{display:"flex",gap:"7px",marginTop:"10px"}}>
+            <button type="button" onClick={() => setNavLabels(prev => ({...prev,[navLabelEditorKey]:navLabelDraft}))}>Preview</button>
+            <button type="button" onClick={async () => {const updated={...navLabels,[navLabelEditorKey]:navLabelDraft};if(await publishSiteSettings({navLabels:updated})){setNavLabels(updated);setNavLabelEditorOpen(false);}}}>Publish Changes</button>
+            <button type="button" onClick={() => setNavLabelEditorOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+      {showPageTransition && (
+        <div className="page-transition-splash">
+          <span className="brand-icon">
+            <svg viewBox="0 0 64 64" aria-hidden="true">
+              <path className="logo-roof" d="M7 29 32 8l25 21" />
+              <path className="logo-house" d="M14 25v31h36V25" />
+              <text x="32" y="45" textAnchor="middle">KH</text>
+            </svg>
+          </span>
+        </div>
+      )}
       {agentRole && newEnquiryNotice && (
         <div className="agent-enquiry-alert-wrap">
           <button
@@ -2479,6 +2858,16 @@ useEffect(() => {
       ) : dashboardUser && showDashboard ? (
         <DashboardRouter
           user={dashboardUser}
+          logoName={logoNameDraft} logoSubtitle={logoSubtitleDraft} logoInitials={logoInitialsDraft}
+          developerMode={developerMode}
+          onToggleDeveloperMode={() => {
+            if (!developerAdminVerified) return;
+            setDeveloperMode(current => {
+              const next = !current;
+              sessionStorage.setItem('khDeveloperMode', next ? 'on' : 'off');
+              return next;
+            });
+          }}
           openEnquiries={showEnquiryInbox}
           onEnquiriesOpened={() => setShowEnquiryInbox(false)}
           enquiryCount={agentEnquiryCount}
@@ -2493,6 +2882,9 @@ useEffect(() => {
           {portalMode && (
             <AgentPortal
               initialMode={portalMode}
+              logoName={logoNameDraft}
+              logoSubtitle={logoSubtitleDraft}
+              logoInitials={logoInitialsDraft}
               onClose={() => setPortalMode(null)}
               onLogin={user => {
                 setDashboardUser(user);
@@ -2502,19 +2894,19 @@ useEffect(() => {
             />
           )}
       <header className="header">
-        <BrandLogo />
+        <BrandLogo name={logoNameDraft} subtitle={logoSubtitleDraft} initials={logoInitialsDraft} />
         <nav className={menuOpen ? 'mobile-nav open' : 'mobile-nav'}>
-          <a href="#homes" onClick={() => setMenuOpen(false)}>Find Homes</a>
-          <a href="#agents" onClick={() => setMenuOpen(false)}>For Agents</a>
-          <a href="#about" onClick={() => setMenuOpen(false)}>About</a>
+          <a href="#homes" onClick={() => setMenuOpen(false)} onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("findHomes");setNavLabelDraft(navLabels.findHomes);setNavLabelEditorOpen(true);}}>{navLabels.findHomes}</a>
+          <a href="#agents" onClick={() => setMenuOpen(false)} onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("forAgents");setNavLabelDraft(navLabels.forAgents);setNavLabelEditorOpen(true);}}>{navLabels.forAgents}</a>
+          <a href="#about" onClick={() => setMenuOpen(false)} onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("about");setNavLabelDraft(navLabels.about);setNavLabelEditorOpen(true);}}>{navLabels.about}</a>
           {dashboardUser ? (
             <>
-              <button className="login" onClick={() => { setMenuOpen(false); setShowDashboard(true); }}>Dashboard</button>
-              <button className="login" onClick={async () => { setMenuOpen(false); await supabase.auth.signOut(); setDashboardUser(null); setShowDashboard(true); }}>Logout</button>
+              <button className="login" onClick={() => {if(developerMode && developerAdminVerified)return;setMenuOpen(false);setShowDashboard(true);}} onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("dashboard");setNavLabelDraft(navLabels.dashboard);setNavLabelEditorOpen(true);}}>{navLabels.dashboard}</button>
+              <button className="login" onClick={async () => {if(developerMode && developerAdminVerified)return;setMenuOpen(false);await supabase.auth.signOut();setDashboardUser(null);setShowDashboard(true);}} onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("logout");setNavLabelDraft(navLabels.logout);setNavLabelEditorOpen(true);}}>{navLabels.logout}</button>
             </>
           ) : (
             <button className="login" onClick={() => {setMenuOpen(false); setPortalMode("login");}}>
-            <User size={17} /> Agent Login
+            <User size={17} /> <span onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("agentLogin");setNavLabelDraft(navLabels.agentLogin);setNavLabelEditorOpen(true);}} title={developerMode && developerAdminVerified ? "Double-click to edit" : undefined}>{navLabels.agentLogin}</span>
             </button>
           )}
         </nav>
@@ -2532,7 +2924,23 @@ useEffect(() => {
       <section className="top-advert">
         <span className="ad-label">FEATURED PROPERTY</span>
         {featuredProperty ? (
-          <div className="ad-content">
+          <div
+            className="ad-content"
+            role="button"
+            tabIndex={0}
+            style={{ cursor: 'pointer' }}
+            onClick={() => {
+              recordPropertyView(featuredProperty.id);
+              setSelectedProperty(featuredProperty);
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                recordPropertyView(featuredProperty.id);
+                setSelectedProperty(featuredProperty);
+              }
+            }}
+          >
             {(featuredProperty.photo_urls || []).filter(Boolean).length > 0 && (
               <div className={(featuredProperty.photo_urls || []).filter(Boolean).length > 1 ? "ad-images two" : "ad-images single"}>
                 {(featuredProperty.photo_urls || []).filter(Boolean).slice(0, 2).map((url, index) => (
@@ -2555,9 +2963,34 @@ useEffect(() => {
 
       <section className="hero">
         <div className="hero-content">
-          <span className="eyebrow">YOUR NEXT HOME STARTS HERE</span>
-          <h1>Find a place<br />you can call <span>home.</span></h1>
-          <p>Discover houses and apartments for rent. Connect directly with verified agents and find a home that fits your budget.</p>
+          <span
+            className="eyebrow"
+            style={{cursor:developerMode && developerAdminVerified ? "pointer" : "inherit"}}
+            title={developerMode && developerAdminVerified ? "Double-click to edit" : undefined}
+            onDoubleClick={() => {
+              if (!developerMode || !developerAdminVerified) return;
+              setHeroEyebrowDraft(heroEyebrow);
+              setHeroEyebrowEditorOpen(true);
+            }}
+          >{heroEyebrow}</span>
+          <h1
+            style={{whiteSpace:"pre-line",cursor:developerMode && developerAdminVerified ? "pointer" : "inherit"}}
+            title={developerMode && developerAdminVerified ? "Double-click to edit" : undefined}
+            onDoubleClick={() => {
+              if (!developerMode || !developerAdminVerified) return;
+              setHeroHeadlineDraft(heroHeadline);
+              setHeroHeadlineEditorOpen(true);
+            }}
+          >{heroHeadline}</h1>
+          <p
+            style={{cursor:developerMode && developerAdminVerified ? "pointer" : "inherit"}}
+            title={developerMode && developerAdminVerified ? "Double-click to edit" : undefined}
+            onDoubleClick={() => {
+              if (!developerMode || !developerAdminVerified) return;
+              setHeroDescriptionDraft(heroDescription);
+              setHeroDescriptionEditorOpen(true);
+            }}
+          >{heroDescription}</p>
           <div className="search-panel">
             <label>
               <span>Property location</span>
@@ -2567,7 +3000,17 @@ useEffect(() => {
               <span>Property name</span>
               <div><Search size={18} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="What are you looking for?" /></div>
             </label>
-            <button onClick={() => document.getElementById('homes').scrollIntoView({ behavior: 'smooth' })}>Search Homes <ArrowRight size={17} /></button>
+            <button
+              onClick={() => document.getElementById("homes").scrollIntoView({ behavior: "smooth" })}
+              onDoubleClick={e => {
+                if (!developerMode || !developerAdminVerified) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setHeroSearchButtonDraft(heroSearchButton);
+                setHeroSearchButtonEditorOpen(true);
+              }}
+              title={developerMode && developerAdminVerified ? "Double-click to edit button text" : undefined}
+            >{heroSearchButton} <ArrowRight size={17} /></button>
           </div>
         </div>
       </section>
@@ -2577,12 +3020,21 @@ useEffect(() => {
         className="advanced-search-open"
         hidden={showAdvancedSearchPage}
         onClick={() => {
+          if (developerMode && developerAdminVerified) return;
           setShowAdvancedSearchPage(true);
           setMenuOpen(false);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
+        onDoubleClick={e => {
+          if (!developerMode || !developerAdminVerified) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setAdvancedSearchButtonDraft(advancedSearchButton);
+          setAdvancedSearchButtonEditorOpen(true);
+        }}
+        title={developerMode && developerAdminVerified ? "Double-click to edit" : undefined}
       >
-        Advanced Property Search <ArrowRight size={17} />
+        {advancedSearchButton} <ArrowRight size={17} />
       </button>
       </>}
       <section className="homes" id="homes">
@@ -2652,13 +3104,22 @@ useEffect(() => {
             type="button"
             className="portal-submit advanced-search-submit"
             onClick={() => {
+              if (developerMode && developerAdminVerified) return;
               document.getElementById('advanced-search-results')?.scrollIntoView({
                 behavior: 'smooth',
                 block: 'start'
               });
             }}
+            onDoubleClick={e => {
+              if (!developerMode || !developerAdminVerified) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setAdvancedSubmitButtonDraft(advancedSubmitButton);
+              setAdvancedSubmitButtonEditorOpen(true);
+            }}
+            title={developerMode && developerAdminVerified ? "Double-click to edit" : undefined}
           >
-            Search Properties
+            {advancedSubmitButton}
           </button>
         </div>
           <button type="button" className="clear-property-filters" onClick={() => {
@@ -2680,7 +3141,7 @@ useEffect(() => {
             <p className="property-error">Could not load properties: {propertiesError}</p>
           )}
 
-          {!propertiesLoading && !propertiesError && filtered.map(p => {
+          {!propertiesLoading && !propertiesError && recentlyViewedFirst.map(p => {
             const phone = (p.contact_phone || '').replace(/\D/g, '');
             const whatsappPhone = phone.startsWith('0')
               ? '234' + phone.slice(1)
@@ -2772,7 +3233,7 @@ useEffect(() => {
                   </div>
                   <button type="button" className="portal-submit"
                     style={{ marginTop: '10px', width: '100%' }}
-                    onClick={() => setSelectedProperty(p)}>
+                    onClick={() => { recordPropertyView(p.id); setSelectedProperty(p); }}>
                     View Full Details
                   </button>
                   {(p.availability_status || 'available') === 'available' ? (
@@ -2882,16 +3343,16 @@ useEffect(() => {
         return (
           <div className="property-details-page" style={{ position: 'fixed', inset: 0, zIndex: 10000, background: '#fff', overflowY: 'auto', padding: '0', color: '#222' }}>
             <header className="header">
-              <BrandLogo />
+              <BrandLogo name={logoNameDraft} subtitle={logoSubtitleDraft} initials={logoInitialsDraft} />
               <nav className={menuOpen ? 'mobile-nav open' : 'mobile-nav'}>
-                <a href="#homes" onClick={() => { setMenuOpen(false); setSelectedProperty(null); }}>Find Homes</a>
-                <a href="#agents" onClick={() => { setMenuOpen(false); setSelectedProperty(null); }}>For Agents</a>
-                <a href="#about" onClick={() => { setMenuOpen(false); setSelectedProperty(null); }}>About</a>
+                <a href="#homes" onClick={() => { if(developerMode && developerAdminVerified)return; setMenuOpen(false); setSelectedProperty(null); }} onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("findHomes");setNavLabelDraft(navLabels.findHomes);setNavLabelEditorOpen(true);}}>{navLabels.findHomes}</a>
+                <a href="#agents" onClick={() => { if(developerMode && developerAdminVerified)return; setMenuOpen(false); setSelectedProperty(null); }} onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("forAgents");setNavLabelDraft(navLabels.forAgents);setNavLabelEditorOpen(true);}}>{navLabels.forAgents}</a>
+                <a href="#about" onClick={() => { if(developerMode && developerAdminVerified)return; setMenuOpen(false); setSelectedProperty(null); }} onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("about");setNavLabelDraft(navLabels.about);setNavLabelEditorOpen(true);}}>{navLabels.about}</a>
                 {dashboardUser ? <>
-                  <button className="login" onClick={() => { setMenuOpen(false); setSelectedProperty(null); setShowDashboard(true); }}>Dashboard</button>
-                  <button className="login" onClick={async () => { setMenuOpen(false); setSelectedProperty(null); await supabase.auth.signOut(); setDashboardUser(null); setShowDashboard(true); }}>Logout</button>
-                </> : <button className="login" onClick={() => { setMenuOpen(false); setSelectedProperty(null); setPortalMode("login"); }}>
-                  <User size={17} /> Agent Login
+                  <button className="login" onClick={() => {if(developerMode && developerAdminVerified)return; setMenuOpen(false); setSelectedProperty(null); setShowDashboard(true); }} onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("dashboard");setNavLabelDraft(navLabels.dashboard);setNavLabelEditorOpen(true);}}>{navLabels.dashboard}</button>
+                  <button className="login" onClick={async () => {if(developerMode && developerAdminVerified)return; setMenuOpen(false); setSelectedProperty(null); await supabase.auth.signOut(); setDashboardUser(null); setShowDashboard(true); }} onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("logout");setNavLabelDraft(navLabels.logout);setNavLabelEditorOpen(true);}}>{navLabels.logout}</button>
+                </> : <button className="login" onClick={() => {if(developerMode && developerAdminVerified)return; setMenuOpen(false); setSelectedProperty(null); setPortalMode("login"); }}>
+                  <User size={17} /> <span onDoubleClick={e => {if(!developerMode || !developerAdminVerified)return;e.preventDefault();e.stopPropagation();setNavLabelEditorKey("agentLogin");setNavLabelDraft(navLabels.agentLogin);setNavLabelEditorOpen(true);}} title={developerMode && developerAdminVerified ? "Double-click to edit" : undefined}>{navLabels.agentLogin}</span>
                 </button>}
               </nav>
               <button className="menu" aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
@@ -2956,7 +3417,7 @@ useEffect(() => {
               </>}
             </div>
             <footer id="about">
-              <BrandLogo />
+              <BrandLogo name={logoNameDraft} subtitle={logoSubtitleDraft} initials={logoInitialsDraft} />
               <p>Helping people find a place to call home.</p>
               <small>© {new Date().getFullYear()} Kyrios Homes For Rent.</small>
             </footer>
@@ -3025,7 +3486,7 @@ useEffect(() => {
         <button onClick={() => setPortalMode("register")}>Become an Agent <ArrowRight size={17} /></button>
       </section>
 
-      <footer id="about"><BrandLogo />
+      <footer id="about"><BrandLogo name={logoNameDraft} subtitle={logoSubtitleDraft} initials={logoInitialsDraft} />
       {adPrivacyOptionsRequired && (
         <button
           type="button"
