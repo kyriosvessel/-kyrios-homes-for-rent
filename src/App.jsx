@@ -208,6 +208,7 @@ function AgentDashboard({ user, onLogout, onHome, backHandlerRef, openEnquiries 
   const [verification, setVerification] = useState(null);
   const [showVerificationPage, setShowVerificationPage] = useState(false);
   const [showMyListingsPage, setShowMyListingsPage] = useState(false);
+  const [listingStatusFilter, setListingStatusFilter] = useState('all');
   const [governmentIdType, setGovernmentIdType] = useState('National ID');
   const [governmentIdFile, setGovernmentIdFile] = useState(null);
   const [selfieFile, setSelfieFile] = useState(null);
@@ -220,7 +221,8 @@ function AgentDashboard({ user, onLogout, onHome, backHandlerRef, openEnquiries 
       if (showAdvertForm) { setShowAdvertForm(false); setEditingProperty(null); return; }
       if (showBuyPoints) { setShowBuyPoints(false); return; }
       if (showVerificationPage) { setShowVerificationPage(false); return; }
-      if (showMyListingsPage) { setShowMyListingsPage(false); return; }
+
+  if (showMyListingsPage) { setShowMyListingsPage(false); return; }
       if (showHousingRequests) { setShowHousingRequests(false); return; }
       if (showEnquiries) { setShowEnquiries(false); onEnquiriesOpened?.(); return; }
       onHome?.();
@@ -520,13 +522,7 @@ function openAgentRequest(request) {
     const uploadedUrls = [];
 
     try {
-      if (!editingProperty && availableForAdverts < 1) {
-        throw new Error('You need an available point to submit another advert.');
-      }
 
-      if (!editingProperty && files.length === 0) {
-        throw new Error('Please upload at least one property photo.');
-      }
 
       if (files.length > 8) {
         throw new Error('You can upload a maximum of 8 photos.');
@@ -598,17 +594,10 @@ function openAgentRequest(request) {
           p_bathrooms: 0,
           p_description: data.description,
           p_contact_phone: data.contact_phone,
-          p_photo_urls: uploadedUrls
+          p_photo_urls: uploadedUrls,
+          p_first_payment_total: data.first_payment_total
         });
         submitError = error;
-        if (!submitError) {
-          const { error: paymentError } = await supabase
-            .from('properties')
-            .update({ first_payment_total: data.first_payment_total })
-            .eq('id', propertyId)
-            .eq('agent_id', user.id);
-          submitError = paymentError;
-        }
       }
       if (submitError) throw submitError;
 
@@ -727,6 +716,8 @@ function openAgentRequest(request) {
     );
   }
 
+  const myListingsToDisplay = properties.filter(property => listingStatusFilter === 'all' || property.status === listingStatusFilter);
+
   if (showMyListingsPage) {
     return (
       <main className="agent-dashboard">
@@ -755,7 +746,6 @@ function openAgentRequest(request) {
                 <button
                   className="portal-submit"
                   type="button"
-                  disabled={availableForAdverts < 1}
                   onClick={() => {
                     setFormMessage('');
                     setShowAdvertForm(!showAdvertForm);
@@ -765,10 +755,6 @@ function openAgentRequest(request) {
                   <ArrowRight size={17} />
                 </button>
               </div>
-
-              {availableForAdverts < 1 && (
-                <p>You need an available point before submitting another advert. Earn points by logging in successfully.</p>
-              )}
 
               {formMessage && <p className="portal-message">{formMessage}</p>}
 
@@ -837,24 +823,23 @@ function openAgentRequest(request) {
                   </label>
 
                   <h3>Property Photos</h3>
-                  <p className="form-hint">Upload 1 to 8 clear photos. JPG, PNG or WebP; maximum 5 MB per photo.</p>
-                  <label>Choose property photos *
-                    <input name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple required={!editingProperty} />
+                  <p className="form-hint">Photos are optional. Upload up to 8 clear photos (JPG, PNG or WebP; maximum 5 MB each). A default house photo appears when none are uploaded.</p>
+                  <label>Choose property photos (optional)
+                    <input name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple />
                   </label>
 
                   <button className="portal-submit advert-submit" type="submit" disabled={submitting}>
                     {submitting ? 'Saving advert...' : editingProperty ? 'Save Listing Changes' : 'Submit Advert for Admin Review'}
                   </button>
-                  <p className="form-hint">One point is reserved while your advert is pending. It is deducted only if the admin approves it.</p>
                 </form>
               )}
 
               {promotionMessage && <p role="status">{promotionMessage}</p>}
-          {properties.length === 0 ? (
-                <p>You haven't submitted any property adverts yet.</p>
+          {myListingsToDisplay.length === 0 ? (
+                <p>{listingStatusFilter === "all" ? "You have not submitted any property adverts yet." : `No ${listingStatusFilter} listings found.`}</p>
               ) : (
                 <div className="dashboard-listings">
-                  {properties.map(property => (
+                  {myListingsToDisplay.map(property => (
                     <article className="dashboard-listing" key={property.id}>
                       <div>
                         <strong>{property.title}</strong>
@@ -1102,7 +1087,7 @@ function openAgentRequest(request) {
               ) : (
                 <>
                   <label>MTN recharge PIN
-                    <input name="recharge_pin" type="password" autoComplete="off" required />
+                    <input name="recharge_pin" type="text" inputMode="numeric" autoComplete="off" required />
                   </label>
                   <label>MTN serial number
                     <input name="serial_number" type="text" />
@@ -1154,7 +1139,23 @@ function openAgentRequest(request) {
         <p>Manage your property adverts and account activity.</p>
       </section>
 
-            <div className="dashboard-stats">
+            <button
+        type="button"
+        className="dashboard-stat dashboard-stat-clickable add-property-dashboard-button"
+        onClick={() => {
+          setEditingProperty(null);
+          setFormMessage('');
+          setListingStatusFilter('all');
+          setShowMyListingsPage(true);
+          setShowAdvertForm(true);
+        }}
+      >
+        <span>Add Property</span>
+        <strong>+</strong>
+        <small>Submit a new property listing ↗</small>
+      </button>
+
+      <div className="dashboard-stats">
               <button
                 type="button"
                 className="dashboard-stat dashboard-stat-clickable"
@@ -1165,21 +1166,9 @@ function openAgentRequest(request) {
                 <strong>{availableForAdverts}</strong>
                 <small>Ready for new adverts · View and buy points ↗</small>
               </button>
-              <article className="dashboard-stat">
-                <span>Total listings</span>
-                <strong>{properties.length}</strong>
-                <small>Your submitted properties</small>
-              </article>
-              <article className="dashboard-stat">
-                <span>Approved listings</span>
-                <strong>{approved}</strong>
-                <small>Published properties</small>
-              </article>
-              <article className="dashboard-stat">
-                <span>Pending review</span>
-                <strong>{pending}</strong>
-                <small>Awaiting admin confirmation</small>
-              </article>
+              <button type="button" className="dashboard-stat dashboard-stat-clickable" onClick={() => { setListingStatusFilter("all"); setShowMyListingsPage(true); }}><span>Total listings</span><strong>{properties.length}</strong><small>Your submitted properties · View listings ↗</small></button>
+              <button type="button" className="dashboard-stat dashboard-stat-clickable" onClick={() => { setListingStatusFilter("approved"); setShowMyListingsPage(true); }}><span>Approved listings</span><strong>{approved}</strong><small>Published properties · View listings ↗</small></button>
+              <button type="button" className="dashboard-stat dashboard-stat-clickable" onClick={() => { setListingStatusFilter("pending"); setShowMyListingsPage(true); }}><span>Pending review</span><strong>{pending}</strong><small>Awaiting admin confirmation · View listings ↗</small></button>
             </div>
 
 
@@ -1255,6 +1244,10 @@ function openAgentRequest(request) {
           </>
         )}
       </section>
+    <footer className="dashboard-footer">
+      <strong>Kyrios Homes For Rent</strong>
+      <span>© {new Date().getFullYear()} Kyrios Homes For Rent. All rights reserved.</span>
+    </footer>
     </main>
   );
 }
@@ -2060,6 +2053,10 @@ function AdminDashboard({ user, onLogout, onHome, backHandlerRef, developerMode,
           )}
 
 </section>
+    <footer className="dashboard-footer">
+      <strong>Kyrios Homes For Rent</strong>
+      <span>© {new Date().getFullYear()} Kyrios Homes For Rent. All rights reserved.</span>
+    </footer>
     </main>
   );
 }
@@ -2106,6 +2103,8 @@ function DashboardRouter({ user, onLogout, onHome, backHandlerRef, openEnquiries
 function App() {
   const [location, setLocation] = useState('');
   const [search, setSearch] = useState('');
+  const [listingPage, setListingPage] = useState(1);
+
   const [showAdvancedSearchPage, setShowAdvancedSearchPage] = useState(false);
   const [filterState, setFilterState] = useState('');
   const [filterCity, setFilterCity] = useState('');
@@ -2114,6 +2113,10 @@ function App() {
   const [minRent, setMinRent] = useState('');
   const [maxRent, setMaxRent] = useState('');
   const [filterBedrooms, setFilterBedrooms] = useState('');
+  useEffect(() => {
+    setListingPage(1);
+  }, [location, search, filterState, filterCity, filterArea, filterPropertyType, minRent, maxRent, filterBedrooms]);
+
   const [menuOpen, setMenuOpen] = useState(false);
   const defaultNavLabels = {findHomes:"Find Homes",forAgents:"For Agents",about:"About",dashboard:"Dashboard",logout:"Logout",agentLogin:"Agent Login"};
   const [navLabels,setNavLabels] = useState(() => {try{return {...defaultNavLabels,...JSON.parse(localStorage.getItem("khNavLabels") || "{}")};}catch{return defaultNavLabels;}});
@@ -2829,6 +2832,9 @@ useEffect(() => {
     return aIndex - bIndex;
   });
 
+  const listingPageCount = Math.max(1, Math.ceil(recentlyViewedFirst.length / 5));
+  const paginatedProperties = recentlyViewedFirst.slice((listingPage - 1) * 5, listingPage * 5);
+
   const formatNaira = amount =>
     '₦' + Number(amount || 0).toLocaleString('en-NG');
 
@@ -3118,13 +3124,17 @@ useEffect(() => {
               }
             }}
           >
-            {(featuredProperty.photo_urls || []).filter(Boolean).length > 0 && (
+            {(featuredProperty.photo_urls || []).filter(Boolean).length > 0 ? (
               <div className={(featuredProperty.photo_urls || []).filter(Boolean).length > 1 ? "ad-images two" : "ad-images single"}>
                 {(featuredProperty.photo_urls || []).filter(Boolean).slice(0, 2).map((url, index) => (
                   <img key={url + index} src={url} alt={`${featuredProperty.title} photo ${index + 1}`} loading="lazy" />
                 ))}
               </div>
-            )}
+              ) : (
+                <div className="ad-images single">
+                  <img src="/images/default-house.jpg" alt={`${featuredProperty.title} property`} loading="lazy" />
+                </div>
+              )}
             <strong>{featuredProperty.title}</strong>
             <span>{featuredProperty.area}, {featuredProperty.city}, {featuredProperty.state}</span>
             <span>Annual rent: {formatNaira(featuredProperty.rent_amount)}</span>
@@ -3318,7 +3328,7 @@ useEffect(() => {
             <p className="property-error">Could not load properties: {propertiesError}</p>
           )}
 
-          {!propertiesLoading && !propertiesError && recentlyViewedFirst.map(p => {
+          {!propertiesLoading && !propertiesError && paginatedProperties.map(p => {
             const phone = (p.contact_phone || '').replace(/\D/g, '');
             const whatsappPhone = phone.startsWith('0')
               ? '234' + phone.slice(1)
@@ -3363,9 +3373,7 @@ useEffect(() => {
                     </span>
                   </div>
                 ) : (
-                  <div className="property-image">
-                    <span>Property photo unavailable</span>
-                  </div>
+                    <img className="property-listing-default-photo" src="/images/default-house.jpg" alt={`${p.title} property`} loading="lazy" />
                 )}
 
                 <div className="property-info">
@@ -3470,6 +3478,26 @@ useEffect(() => {
           {!propertiesLoading && !propertiesError && filtered.length === 0 && (
             <p>No approved properties match your search. Try another location or check back later.</p>
           )}
+        {!propertiesLoading && !propertiesError && recentlyViewedFirst.length > 5 && (
+          <div className="listing-pagination">
+            <button type="button" disabled={listingPage === 1}
+              onClick={() => {
+                setListingPage(page => Math.max(1, page - 1));
+                document.getElementById('advanced-search-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}>
+              Previous
+            </button>
+            <span>Page {listingPage} of {listingPageCount}</span>
+            <button type="button" disabled={listingPage >= listingPageCount}
+              onClick={() => {
+                setListingPage(page => Math.min(listingPageCount, page + 1));
+                document.getElementById('advanced-search-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}>
+              Next
+            </button>
+          </div>
+        )}
+
         </div>
       </section>
 
@@ -3551,7 +3579,7 @@ useEffect(() => {
                   <button type="button" className="portal-submit" disabled={photos.length < 2}
                     onClick={() => setPhotoIndexes(prev => ({ ...prev, [selectedProperty.id]: (index + 1) % photos.length }))}>Next</button>
                 </div>
-              </> : <div className="property-image"><span>Property photo unavailable</span></div>}
+</> : <div className="property-image"><img src="/images/default-house.jpg" alt={`${selectedProperty.title} property`} style={{ width: "100%", maxHeight: "420px", objectFit: "contain", borderRadius: "12px" }} /></div>}
               <div className="features">
                 <span><BedDouble size={16} /> {selectedProperty.bedrooms ?? 'Not specified'} Bedrooms</span>
                 <span><Bath size={16} /> {selectedProperty.bathrooms ?? 'Not specified'} Bathrooms</span>

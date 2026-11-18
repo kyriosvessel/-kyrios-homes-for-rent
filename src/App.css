@@ -2393,7 +2393,7 @@ footer p {
 .property-photo-gallery.slideshow-gallery img {
   display: block;
   width: 100%;
-  height: 230px;
+  height: 160px;
   object-fit: cover;
 }
 
@@ -2411,7 +2411,7 @@ footer p {
 
 @media (max-width: 600px) {
   .property-photo-gallery.slideshow-gallery img {
-    height: 220px;
+    height: 140px;
   }
 }
 
@@ -3932,4 +3932,197 @@ footer p {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   margin: 18px 0 24px;
+}
+
+
+/* Smaller images on the main property listings only */
+.homes .property-photo-gallery.slideshow-gallery img,
+.homes .property-listing-default-photo {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+}
+
+@media (min-width: 601px) {
+  .homes .property-photo-gallery.slideshow-gallery img,
+  .homes .property-listing-default-photo {
+    height: 120px;
+  }
+}
+
+
+/* Strong decorative separation for public homepage listings */
+.homes .property-grid {
+  column-gap: 30px;
+  row-gap: 34px;
+}
+
+.homes .property {
+  position: relative;
+  border: 2px solid #174b3d;
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(23, 75, 61, 0.12);
+  overflow: hidden;
+}
+
+.homes .property::before {
+  content: "";
+  display: block;
+  height: 6px;
+  width: 100%;
+  background: linear-gradient(90deg, #174b3d 0%, #287653 65%, #d4ad4d 100%);
+}
+
+.homes .property:hover {
+  box-shadow: 0 12px 26px rgba(23, 75, 61, 0.18);
+}
+
+@media (max-width: 750px) {
+  .homes .property-grid {
+    row-gap: 28px;
+  }
+}
+
+
+/* Matching clickable card design for Agent Dashboard actions */
+.agent-dashboard .dashboard-section-grid .dashboard-stat-clickable {
+  min-height: 138px;
+  padding: 21px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #e4ece6;
+  border-radius: 17px;
+  box-shadow: 0 8px 25px rgba(23, 59, 43, .045);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+.agent-dashboard .dashboard-section-grid .dashboard-stat-clickable:hover {
+  transform: translateY(-3px);
+  border-color: #287653;
+  box-shadow: 0 12px 26px rgba(23, 75, 61, .14);
+}
+
+.agent-dashboard .dashboard-section-grid .dashboard-stat-clickable strong {
+  display: block;
+  margin: 12px 0 7px;
+  color: #176b43;
+  font-size: 26px;
+  overflow-wrap: anywhere;
+}
+
+.agent-dashboard .dashboard-section-grid .dashboard-stat-clickable small {
+  color: #176b43;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.agent-dashboard .dashboard-section-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 360px) {
+  .agent-dashboard .dashboard-section-grid {
+    gap: 9px;
+  }
+
+  .agent-dashboard .dashboard-section-grid .dashboard-stat-clickable {
+    padding: 13px;
+  }
+}
+
+/* Add Property dashboard button */
+.agent-dashboard .add-property-dashboard-button {
+  width: 100%;
+  min-height: 125px;
+  margin: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #1261c9;
+  background: #f3f8ff;
+  border: 2px solid #2674df;
+  border-radius: 16px;
+  box-shadow: 0 5px 18px rgba(38, 116, 223, .12);
+  cursor: pointer;
+  transition: .2s ease;
+}
+
+.agent-dashboard .add-property-dashboard-button span,
+.agent-dashboard .add-property-dashboard-button strong,
+.agent-dashboard .add-property-dashboard-button small {
+  color: #1261c9;
+  text-align: center;
+}
+
+.agent-dashboard .add-property-dashboard-button span {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.agent-dashboard .add-property-dashboard-button strong {
+  margin: 5px 0;
+  font-size: 32px;
+}
+
+.agent-dashboard .add-property-dashboard-button small {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.agent-dashboard .add-property-dashboard-button:hover {
+  background: #e6f1ff;
+  border-color: #084eaa;
+  box-shadow: 0 9px 22px rgba(38, 116, 223, .2);
+  transform: translateY(-2px);
+}
+
+/* Shared Agent and Admin dashboard footer */
+.dashboard-footer {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 35px;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  background: #f4f8f5;
+  border-top: 3px solid #287653;
+  color: #52665b;
+}
+
+.dashboard-footer strong {
+  color: #174b3d;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.dashboard-footer span {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Dark blue dashboard footer */
+.agent-dashboard .dashboard-footer {
+  background: #102b50;
+  border-top: 3px solid #ffffff;
+  color: #cbd5e1;
+}
+
+.agent-dashboard .dashboard-footer strong {
+  color: #ffffff;
+}
+
+.agent-dashboard .dashboard-footer span {
+  color: #cbd5e1;
 }
